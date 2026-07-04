@@ -1,0 +1,65 @@
+using Tw.Maui;
+using static Gallery.Pages.GalleryUi;
+
+namespace Gallery.Pages;
+
+/// <summary>The entire Tailwind palette — 22 families × 11 shades, every swatch a class string.</summary>
+public class ColorsPage : ContentPage
+{
+    private static readonly string[] Families =
+    [
+        "slate", "gray", "zinc", "neutral", "stone",
+        "red", "orange", "amber", "yellow", "lime",
+        "green", "emerald", "teal", "cyan", "sky",
+        "blue", "indigo", "violet", "purple", "fuchsia",
+        "pink", "rose",
+    ];
+
+    private static readonly string[] Shades =
+        ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"];
+
+    public ColorsPage()
+    {
+        Title = "Colors";
+
+        var rows = new List<View>
+        {
+            Section("Color palette"),
+            Caption("bg-{family}-{shade} — all 242 entries, hex-identical to Tailwind v3.4.17"),
+            HeaderRow(),
+        };
+
+        foreach (var family in Families)
+        {
+            var row = Row("gap-1", Code(family));
+            foreach (var shade in Shades)
+                row.Children.Add(new BoxView().Tw($"bg-{family}-{shade} size-7 rounded-md"));
+            rows.Add(row);
+        }
+
+        rows.Add(Section("Opacity modifier"));
+        rows.Add(Caption("bg-indigo-600/N over a checkerboard-ish background"));
+        var alphaRow = Row("gap-1", Code("/100 → /10"));
+        foreach (var alpha in new[] { "100", "90", "75", "60", "50", "40", "25", "10" })
+            alphaRow.Children.Add(new BoxView().Tw($"bg-indigo-600/{alpha} size-7 rounded-md"));
+        rows.Add(alphaRow);
+
+        rows.Add(Section("Arbitrary colors"));
+        rows.Add(Row("gap-1",
+            Code("bg-[#hex]"),
+            new BoxView().Tw("bg-[#ff6b6b] size-7 rounded-md"),
+            new BoxView().Tw("bg-[#4ecdc4] size-7 rounded-md"),
+            new BoxView().Tw("bg-[#1a535c] size-7 rounded-md"),
+            new BoxView().Tw("bg-[#ffe66d] size-7 rounded-md")));
+
+        Content = Page(this, rows.ToArray());
+    }
+
+    private static View HeaderRow()
+    {
+        var header = Row("gap-1", Code(""));
+        foreach (var shade in Shades)
+            header.Children.Add(new Label { Text = shade }.Tw("text-xs text-slate-400 w-7 text-center"));
+        return header;
+    }
+}

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:tw="https://tw"
+             xmlns:pages="clr-namespace:Gallery.Pages"
+             x:Class="Gallery.Pages.VpnDemoPage"
+             Title="VPN Demo"
+             tw:Tw.Class="bg-slate-50">
+
+    <Grid ColumnDefinitions="2*,3*">
+
+        <!-- ═══════════════ Left panel: gradient + actions ═══════════════ -->
+        <Grid tw:Tw.Class="bg-gradient-to-b from-sky-400 via-blue-500 to-blue-700">
+            <VerticalStackLayout tw:Tw.Class="gap-3 px-12 my-auto w-full">
+
+                <Label Text="Hello,"
+                       tw:Tw.Class="text-4xl font-semibold text-white text-center mb-2" />
+                <Label Text="Please select the way you wish to proceed"
+                       tw:Tw.Class="text-lg text-white/90 text-center mb-8 leading-snug" />
+
+                <Button Text="Get Premium"
+                        tw:Tw.Class="transition-colors duration-150 bg-white hover:bg-sky-100 pressed:bg-sky-200 text-slate-800 text-base font-semibold rounded-xl py-3.5 w-full" />
+
+                <Button Text="Log in"
+                        tw:Tw.Class="transition-colors duration-150 bg-white/25 hover:bg-white/40 pressed:bg-white/60 text-white text-base font-medium rounded-xl py-3.5 w-full" />
+
+                <Button Text="Continue free"
+                        tw:Tw.Class="transition-colors duration-150 bg-white/10 hover:bg-white/25 pressed:bg-white/40 border border-white/40 text-white text-base font-medium rounded-xl py-3.5 w-full" />
+
+            </VerticalStackLayout>
+        </Grid>
+
+        <!-- ═══════════════ Right panel: animated carousel ═══════════════ -->
+        <Grid Grid.Column="1" RowDefinitions="*,Auto" tw:Tw.Class="bg-slate-50">
+
+            <CarouselView x:Name="Carousel"
+                          Loop="True"
+                          PositionChanged="OnCarouselPositionChanged">
+                <CarouselView.ItemsSource>
+                    <x:Array Type="{x:Type pages:VpnSlide}">
+                        <pages:VpnSlide Glyph="U" Title="Welcome to UrbanVPN"
+                                        Subtitle="Secure your data, encrypt your connection,&#10;and enjoy a seamless VPN experience" />
+                        <pages:VpnSlide Glyph="🔒" Title="Bank-grade encryption"
+                                        Subtitle="Every packet is wrapped in AES-256 —&#10;nobody reads your traffic but you" />
+                        <pages:VpnSlide Glyph="🌍" Title="Servers everywhere"
+                                        Subtitle="80+ locations across the globe,&#10;one tap away from any of them" />
+                        <pages:VpnSlide Glyph="⚡" Title="Blazing fast"
+                                        Subtitle="Optimized routes keep your streams&#10;smooth and your downloads quick" />
+                    </x:Array>
+                </CarouselView.ItemsSource>
+                <CarouselView.ItemTemplate>
+                    <DataTemplate x:DataType="pages:VpnSlide">
+                        <VerticalStackLayout tw:Tw.Class="gap-5 my-auto mx-auto max-w-md p-8">
+
+                            <!-- Layered halo + gradient badge -->
+                            <Grid tw:Tw.Class="mx-auto mb-4">
+                                <Border tw:Tw.Class="size-64 rounded-full bg-sky-100 border-0 mx-auto my-auto" />
+                                <Border tw:Tw.Class="size-52 rounded-full bg-sky-200/70 border-0 mx-auto my-auto" />
+                                <Border tw:Tw.Class="size-36 rounded-full bg-gradient-to-b from-sky-300 to-blue-600 shadow-xl border-0 mx-auto my-auto">
+                                    <Label Text="{Binding Glyph}"
+                                           tw:Tw.Class="text-6xl font-bold text-white m-auto" />
+                                </Border>
+                            </Grid>
+
+                            <Label Text="{Binding Title}"
+                                   tw:Tw.Class="text-3xl font-bold text-slate-900 text-center" />
+                            <Label Text="{Binding Subtitle}"
+                                   tw:Tw.Class="text-base text-slate-500 text-center leading-normal" />
+
+                        </VerticalStackLayout>
+                    </DataTemplate>
+                </CarouselView.ItemTemplate>
+            </CarouselView>
+
+            <!-- Tappable dots: the active one animates into a blue pill.
+                 Each dot is base classes + ActiveClass toggled by carousel position;
+                 hover:/transition-all give web-grade feedback. -->
+            <HorizontalStackLayout Grid.Row="1" tw:Tw.Class="gap-2.5 mx-auto mb-10">
+                <Border x:Name="Dot0" ClassId="0" tw:Tw.IsActive="True"
+                        tw:Tw.Class="transition-all duration-200 w-2.5 h-2.5 rounded-full bg-slate-300 hover:bg-slate-400 border-0"
+                        tw:Tw.ActiveClass="bg-blue-500 hover:bg-blue-500 w-6">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnDotTapped" />
+                    </Border.GestureRecognizers>
+                </Border>
+                <Border x:Name="Dot1" ClassId="1"
+                        tw:Tw.Class="transition-all duration-200 w-2.5 h-2.5 rounded-full bg-slate-300 hover:bg-slate-400 border-0"
+                        tw:Tw.ActiveClass="bg-blue-500 hover:bg-blue-500 w-6">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnDotTapped" />
+                    </Border.GestureRecognizers>
+                </Border>
+                <Border x:Name="Dot2" ClassId="2"
+                        tw:Tw.Class="transition-all duration-200 w-2.5 h-2.5 rounded-full bg-slate-300 hover:bg-slate-400 border-0"
+                        tw:Tw.ActiveClass="bg-blue-500 hover:bg-blue-500 w-6">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnDotTapped" />
+                    </Border.GestureRecognizers>
+                </Border>
+                <Border x:Name="Dot3" ClassId="3"
+                        tw:Tw.Class="transition-all duration-200 w-2.5 h-2.5 rounded-full bg-slate-300 hover:bg-slate-400 border-0"
+                        tw:Tw.ActiveClass="bg-blue-500 hover:bg-blue-500 w-6">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnDotTapped" />
+                    </Border.GestureRecognizers>
+                </Border>
+            </HorizontalStackLayout>
+
+        </Grid>
+    </Grid>
+
+</ContentPage>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="Gallery.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:local="clr-namespace:Gallery"
+    xmlns:pages="clr-namespace:Gallery.Pages"
+    Title="Tw Gallery"
+    FlyoutBehavior="Locked"
+    FlyoutWidth="200">
+
+    <ShellContent Title="Components" ContentTemplate="{DataTemplate local:MainPage}" Route="Components" />
+    <ShellContent Title="Colors" ContentTemplate="{DataTemplate pages:ColorsPage}" Route="Colors" />
+    <ShellContent Title="Typography" ContentTemplate="{DataTemplate pages:TypographyPage}" Route="Typography" />
+    <ShellContent Title="Spacing" ContentTemplate="{DataTemplate pages:SpacingPage}" Route="Spacing" />
+    <ShellContent Title="Utilities" ContentTemplate="{DataTemplate pages:UtilitiesPage}" Route="Utilities" />
+    <ShellContent Title="Layout" ContentTemplate="{DataTemplate pages:LayoutPage}" Route="Layout" />
+    <ShellContent Title="Library" ContentTemplate="{DataTemplate pages:LibraryPage}" Route="Library" />
+    <ShellContent Title="VPN Demo" ContentTemplate="{DataTemplate pages:VpnDemoPage}" Route="VpnDemo" />
+    <ShellContent Title="Web vs Native" ContentTemplate="{DataTemplate pages:ComparisonPage}" Route="Comparison" />
+
+</Shell>

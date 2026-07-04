@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:tw="https://tw"
+             x:Class="Gallery.MainPage"
+             tw:Tw.Class="bg-slate-50 dark:bg-slate-950">
+
+    <ScrollView>
+        <VerticalStackLayout tw:Tw.Class="gap-4 p-6 max-w-xl">
+
+            <Label tw:Tw.Class="text-3xl font-bold text-slate-900 dark:text-white"
+                   Text="Tw Gallery" />
+            <Label tw:Tw.Class="text-sm text-slate-500 dark:text-slate-400"
+                   Text="Every style on this page is a Tailwind utility string. No XAML styles, no resource dictionaries." />
+
+            <!-- Card: the classic AI-generated upgrade card -->
+            <Border tw:Tw.Class="bg-white dark:bg-slate-800 rounded-2xl shadow-md p-6 border-0">
+                <VerticalStackLayout tw:Tw.Class="gap-3">
+                    <Label tw:Tw.Class="text-xl font-bold text-slate-900 dark:text-white"
+                           Text="Upgrade to Pro" />
+                    <Label tw:Tw.Class="text-sm text-slate-500 dark:text-slate-400"
+                           Text="Unlock unlimited projects, priority support, and advanced analytics for your whole team." />
+                    <Button tw:Tw.Class="bg-indigo-600 pressed:bg-indigo-800 text-white font-semibold rounded-lg px-4 py-3 mt-2"
+                            Text="Get started" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Outlined card with badges -->
+            <Border tw:Tw.Class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
+                <VerticalStackLayout tw:Tw.Class="gap-3">
+                    <HorizontalStackLayout tw:Tw.Class="gap-2">
+                        <Label tw:Tw.Class="bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full px-3 py-1"
+                               Text="Active" />
+                        <Label tw:Tw.Class="bg-amber-100 text-amber-700 text-xs font-medium rounded-full px-3 py-1"
+                               Text="Beta" />
+                        <Label tw:Tw.Class="bg-sky-100 text-sky-700 text-xs font-medium rounded-full px-3 py-1"
+                               Text="v0.1" />
+                    </HorizontalStackLayout>
+                    <Label tw:Tw.Class="text-lg font-semibold text-slate-900 dark:text-white"
+                           Text="Design tokens, natively" />
+                    <Label tw:Tw.Class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2"
+                           Text="The engine compiles each unique class string once, caches the plan, and applies plain property setters — steady-state cost is identical to hand-written XAML no matter how many elements share a style." />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Button row -->
+            <HorizontalStackLayout tw:Tw.Class="gap-3">
+                <Button tw:Tw.Class="bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-medium rounded-lg px-4 py-2"
+                        Text="Primary" />
+                <Button tw:Tw.Class="bg-transparent border-2 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-medium rounded-lg px-4 py-2"
+                        Text="Secondary" />
+                <Button tw:Tw.Class="bg-red-600 pressed:bg-red-800 text-white font-medium rounded-lg px-4 py-2"
+                        Text="Delete" />
+            </HorizontalStackLayout>
+
+            <!-- Platform variants: resolved at plan-compile time, zero runtime cost -->
+            <Border tw:Tw.Class="bg-violet-50 dark:bg-violet-950 border border-violet-200 dark:border-violet-800 rounded-xl windows:p-5 android:p-3 ios:p-4">
+                <Label tw:Tw.Class="text-lg text-violet-700 dark:text-violet-300"
+                       Text="This card uses windows:p-5 android:p-3 ios:p-4 — the other platforms' utilities were filtered out when the plan compiled, so they cost nothing at runtime." />
+            </Border>
+
+            <!-- Entry -->
+            <Entry tw:Tw.Class="bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg p-3 text-sm"
+                   Placeholder="you@example.com" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>
