@@ -8,6 +8,13 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Tw.Core</RootNamespace>
     <IsAotCompatible Condition="'$(TargetFramework)' == 'net10.0'">true</IsAotCompatible>
+
+    <IsPackable>true</IsPackable>
+    <PackageId>Tw.Core</PackageId>
+    <Title>Tw.Core — Tailwind utility styling engine</Title>
+    <Description>Framework-neutral engine behind Tw: a span-based parser for the Tailwind class vocabulary, token tables, resolver, and cached style plans. Zero UI dependencies. Use Tw.Maui for .NET MAUI.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">

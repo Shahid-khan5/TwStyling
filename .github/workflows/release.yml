@@ -1,0 +1,78 @@
+name: Release
+
+# Tag the commit you want to ship, e.g.:  git tag v0.1.0-preview.1 && git push origin v0.1.0-preview.1
+on:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-latest
+
+    # Publishing uses nuget.org Trusted Publishing (OIDC), not a stored API key.
+    # The matching policy on nuget.org must name:
+    #   owner Shahid-khan5 / repo Tw.Maui / workflow release.yml / environment (blank)
+    # Do NOT add `environment:` to this job unless you also set it on the policy — the
+    # OIDC claims have to match exactly or the token exchange is rejected.
+    permissions:
+      id-token: write   # lets GitHub mint the OIDC token nuget.org validates
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # SourceLink embeds the commit; shallow clones lose it
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Derive version from tag
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Restore workloads
+        run: dotnet workload restore Tw.slnx
+
+      - name: Build
+        run: dotnet build Tw.slnx -c Release -p:Version=${{ env.VERSION }}
+
+      - name: Test
+        run: dotnet test tests/Tw.Core.Tests/Tw.Core.Tests.csproj -c Release --no-build
+
+      - name: Pack
+        run: dotnet pack Tw.slnx -c Release --no-build -o artifacts -p:Version=${{ env.VERSION }}
+
+      # Runs last, right before the pushes: the key it returns expires after 1 hour.
+      # `user` is the nuget.org profile name that owns the packages — not an email.
+      - name: NuGet login (OIDC -> short-lived API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: shahidkhandev
+
+      # Tw.Core first: Tw.Maui depends on it. Pushing the dependent package before its
+      # dependency is indexed leaves it briefly uninstallable.
+      # Each .nupkg push carries its matching .snupkg symbol package automatically.
+      - name: Push Tw.Core
+        run: >
+          dotnet nuget push artifacts/Tw.Core.${{ env.VERSION }}.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - name: Push Tw.Maui
+        run: >
+          dotnet nuget push artifacts/Tw.Maui.${{ env.VERSION }}.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts/*.*nupkg

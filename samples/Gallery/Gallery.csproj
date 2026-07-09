@@ -69,11 +69,21 @@
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
 	</ItemGroup>
 
+	<PropertyGroup>
+		<!-- inspectable generator output under obj/generated -->
+		<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+		<CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)generated</CompilerGeneratedFilesOutputPath>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\Tw.Maui\Tw.Maui.csproj" />
 		<!-- Build-time validation of class strings in C# code -->
 		<ProjectReference Include="..\..\src\Tw.Analyzers\Tw.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-		<ProjectReference Include="..\..\src\Tw.Components\Tw.Components.csproj" />
+		<!-- Build-time compilation: preloaded plans for C# and XAML literals.
+		     Package consumers get this automatically from build\Tw.Maui.targets. -->
+		<ProjectReference Include="..\..\src\Tw.Generators\Tw.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+		<!-- XAML goes to the compiler so the generator can precompile tw:Tw.Class strings -->
+		<AdditionalFiles Include="**\*.xaml" />
 	</ItemGroup>
 
 </Project>

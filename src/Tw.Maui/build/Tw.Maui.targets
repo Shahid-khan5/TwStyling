@@ -1,0 +1,25 @@
+<Project>
+
+  <!--
+    Imported after the consuming project, so its XAML globs are already known. The generator reads
+    .xaml through AdditionalFiles to precompile tw:Tw.Class literals into static StylePlan data.
+    Excluding @(AdditionalFiles) keeps this a no-op if the consumer already added them by hand.
+  -->
+  <ItemGroup Condition="'$(TwPrecompile)' == 'true'">
+    <AdditionalFiles Include="**\*.xaml"
+                     Exclude="@(AdditionalFiles);bin\**\*.xaml;obj\**\*.xaml"
+                     Visible="false" />
+  </ItemGroup>
+
+  <!--
+    TwPrecompile=false must also unload the generator, otherwise it keeps harvesting C# .Tw("...")
+    literals and emitting preloads. Tw.Analyzers stays loaded either way: TW0001 validation is
+    independent of precompilation.
+  -->
+  <Target Name="TwRemoveGenerator" BeforeTargets="CoreCompile" Condition="'$(TwPrecompile)' != 'true'">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="'%(Filename)%(Extension)' == 'Tw.Generators.dll'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

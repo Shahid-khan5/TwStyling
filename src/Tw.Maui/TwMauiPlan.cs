@@ -162,8 +162,9 @@ internal sealed class TwMauiPlan
         {
             if (id is TwPropertyId.FontWeight or TwPropertyId.FontItalic
                 or TwPropertyId.GradientDirection or TwPropertyId.GradientFrom
-                or TwPropertyId.GradientVia or TwPropertyId.GradientTo)
-                continue; // folded above
+                or TwPropertyId.GradientVia or TwPropertyId.GradientTo
+                or TwPropertyId.ShadowColor)
+                continue; // folded into FontAttributes / Background / Shadow
 
             if (id is TwPropertyId.TransitionProps or TwPropertyId.TransitionDuration
                 or TwPropertyId.TransitionDelay or TwPropertyId.TransitionEasing
@@ -251,10 +252,11 @@ internal sealed class TwMauiPlan
                 break;
 
             case TwPropertyId.BorderWidth:
+                // MAUI's stroke thickness is uniform; reduce the per-side Edges to one width.
                 if (typeof(Border).IsAssignableFrom(type))
-                    AddDirect(Border.StrokeThicknessProperty, Boxed.Double(hasLight ? lv.X : 0), Boxed.Double(hasDark ? dv.X : 0));
+                    AddDirect(Border.StrokeThicknessProperty, Boxed.Double(hasLight ? lv.UniformEdge() : 0), Boxed.Double(hasDark ? dv.UniformEdge() : 0));
                 else
-                    Add(type, TwProps.BorderWidth, Boxed.Double(hasLight ? lv.X : 0), Boxed.Double(hasDark ? dv.X : 0));
+                    Add(type, TwProps.BorderWidth, Boxed.Double(hasLight ? lv.UniformEdge() : 0), Boxed.Double(hasDark ? dv.UniformEdge() : 0));
                 break;
 
             case TwPropertyId.CornerRadius:
@@ -278,7 +280,7 @@ internal sealed class TwMauiPlan
                 break;
 
             case TwPropertyId.LineHeight:
-                Add(type, TwProps.LineHeight, Boxed.Double(hasLight ? lv.X : 1), Boxed.Double(hasDark ? dv.X : 1));
+                Add(type, TwProps.LineHeight, LineHeightOf(hasLight, lv, lightSet), LineHeightOf(hasDark, dv, darkSet));
                 break;
 
             case TwPropertyId.TextAlign:
@@ -367,7 +369,7 @@ internal sealed class TwMauiPlan
                 break;
 
             case TwPropertyId.Shadow:
-                AddDirect(VisualElement.ShadowProperty, ShadowOf(hasLight, lv), ShadowOf(hasDark, dv));
+                AddDirect(VisualElement.ShadowProperty, ShadowOf(hasLight, lv, lightSet), ShadowOf(hasDark, dv, darkSet));
                 break;
 
             case TwPropertyId.FlexDirection when typeof(FlexLayout).IsAssignableFrom(type):
@@ -433,6 +435,42 @@ internal sealed class TwMauiPlan
             case TwPropertyId.Visible:
                 AddDirect(VisualElement.IsVisibleProperty, !hasLight || lv.X > 0, !hasDark || dv.X > 0);
                 break;
+
+            case TwPropertyId.ObjectFit when typeof(Image).IsAssignableFrom(type):
+                AddDirect(Image.AspectProperty, AspectOf(hasLight, lv), AspectOf(hasDark, dv));
+                break;
+
+            case TwPropertyId.ScaleX:
+                AddDirect(VisualElement.ScaleXProperty, Boxed.Double(hasLight ? lv.X : 1), Boxed.Double(hasDark ? dv.X : 1));
+                break;
+
+            case TwPropertyId.ScaleY:
+                AddDirect(VisualElement.ScaleYProperty, Boxed.Double(hasLight ? lv.X : 1), Boxed.Double(hasDark ? dv.X : 1));
+                break;
+
+            case TwPropertyId.TransformOriginX:
+                AddDirect(VisualElement.AnchorXProperty, Boxed.Double(hasLight ? lv.X : 0.5), Boxed.Double(hasDark ? dv.X : 0.5));
+                break;
+
+            case TwPropertyId.TransformOriginY:
+                AddDirect(VisualElement.AnchorYProperty, Boxed.Double(hasLight ? lv.X : 0.5), Boxed.Double(hasDark ? dv.X : 0.5));
+                break;
+
+            case TwPropertyId.PointerEventsNone:
+                AddDirect(VisualElement.InputTransparentProperty, (hasLight ? lv.X : 0) > 0, (hasDark ? dv.X : 0) > 0);
+                break;
+
+            case TwPropertyId.AlignContent when typeof(FlexLayout).IsAssignableFrom(type):
+                AddDirect(FlexLayout.AlignContentProperty, AlignContentOf(hasLight, lv), AlignContentOf(hasDark, dv));
+                break;
+
+            case TwPropertyId.Order:
+                AddDirect(FlexLayout.OrderProperty, Boxed.Int(hasLight ? (int)lv.X : 0), Boxed.Int(hasDark ? (int)dv.X : 0));
+                break;
+
+            case TwPropertyId.LineBreak when typeof(Label).IsAssignableFrom(type):
+                AddDirect(Label.LineBreakModeProperty, LineBreakOf(hasLight, lv), LineBreakOf(hasDark, dv));
+                break;
         }
 
         void Add(Type t, (Type, BindableProperty)[] table, object? lightValue, object? darkValue)
@@ -472,7 +510,9 @@ internal sealed class TwMauiPlan
     {
         double L(float f) => float.IsNaN(f) ? 0 : f;
 
-        if (typeof(VerticalStackLayout).IsAssignableFrom(type) || typeof(StackLayout).IsAssignableFrom(type))
+        // Legacy StackLayout is excluded: its Orientation is a runtime property, so a
+        // static gap→axis mapping would guess wrong half the time. Use VSL/HSL.
+        if (typeof(VerticalStackLayout).IsAssignableFrom(type))
             output.Add(new Entry(StackBase.SpacingProperty, Boxed.Double(hasLight ? L(lv.Y) : 0), Boxed.Double(hasDark ? L(dv.Y) : 0)));
         else if (typeof(HorizontalStackLayout).IsAssignableFrom(type))
             output.Add(new Entry(StackBase.SpacingProperty, Boxed.Double(hasLight ? L(lv.X) : 0), Boxed.Double(hasDark ? L(dv.X) : 0)));
@@ -534,10 +574,19 @@ internal sealed class TwMauiPlan
         return new FreshValue(rgba, () => new SolidColorBrush(ToColor(rgba)));
     }
 
-    private static object? ShadowOf(bool has, TwValue v)
+    private static object? ShadowOf(bool has, TwValue v, TwDeclaration[] set)
     {
         if (!has) return null;
-        var (rgba, x, y, blur) = (v.Rgba, v.X, v.Y, v.Z);
+        uint rgba = v.Rgba; // black tint with the shadow size's opacity in the alpha channel
+        if (TryFind(set, TwPropertyId.ShadowColor, out var c))
+        {
+            uint colorAlpha = (c.Rgba >> 24) & 0xFF;
+            // A bare palette color (alpha 0xFF) keeps the size's subtle opacity; an explicit
+            // /opacity modifier (shadow-blue-500/50) overrides it.
+            uint alpha = colorAlpha == 0xFF ? (rgba >> 24) & 0xFF : colorAlpha;
+            rgba = (alpha << 24) | (c.Rgba & 0x00FFFFFF);
+        }
+        var (x, y, blur) = (v.X, v.Y, v.Z);
         return new FreshValue((rgba, x, y, blur), () =>
         {
             float alpha = ((rgba >> 24) & 0xFF) / 255f;
@@ -580,6 +629,40 @@ internal sealed class TwMauiPlan
     };
 
     private static object? FloatOf(bool has, TwValue v, float fallback) => has ? v.X : fallback;
+
+    /// <summary>Line height as a MAUI multiplier: named/multiplier leadings pass through;
+    /// numeric leadings are absolute DIU divided by the plan's font size.</summary>
+    private static object LineHeightOf(bool has, TwValue v, TwDeclaration[] set)
+    {
+        if (!has) return (double)1;
+        return (double)(v.IsAbsoluteLength ? v.X / FontSizeIn(set) : v.X);
+    }
+
+    private static object AspectOf(bool has, TwValue v) => !has ? Aspect.AspectFit : (TwObjectFit)(byte)v.X switch
+    {
+        TwObjectFit.Cover => Aspect.AspectFill,
+        TwObjectFit.Fill => Aspect.Fill,
+        TwObjectFit.None => Aspect.Center,
+        _ => Aspect.AspectFit, // Contain and ScaleDown both fit within bounds
+    };
+
+    private static object LineBreakOf(bool has, TwValue v) => !has ? LineBreakMode.WordWrap : (TwLineBreak)(byte)v.X switch
+    {
+        TwLineBreak.NoWrap => LineBreakMode.NoWrap,
+        TwLineBreak.CharacterWrap => LineBreakMode.CharacterWrap,
+        _ => LineBreakMode.WordWrap,
+    };
+
+    private static object AlignContentOf(bool has, TwValue v) => !has ? Microsoft.Maui.Layouts.FlexAlignContent.Stretch : (TwAlignContent)(byte)v.X switch
+    {
+        TwAlignContent.Start => Microsoft.Maui.Layouts.FlexAlignContent.Start,
+        TwAlignContent.End => Microsoft.Maui.Layouts.FlexAlignContent.End,
+        TwAlignContent.Center => Microsoft.Maui.Layouts.FlexAlignContent.Center,
+        TwAlignContent.Between => Microsoft.Maui.Layouts.FlexAlignContent.SpaceBetween,
+        // MAUI FlexAlignContent has no SpaceEvenly — around is the closest native match.
+        TwAlignContent.Around or TwAlignContent.Evenly => Microsoft.Maui.Layouts.FlexAlignContent.SpaceAround,
+        _ => Microsoft.Maui.Layouts.FlexAlignContent.Stretch,
+    };
 
     private static object? FlexDirectionOf(bool has, TwValue v) => !has ? null : (TwFlexDirection)(byte)v.X switch
     {
@@ -709,7 +792,11 @@ internal sealed class TwMauiPlan
         return null;
     }
 
-    /// <summary>Pre-boxed common values so cached plans don't re-box on every compile.</summary>
+    /// <summary>
+    /// Boxes numeric setter values with an explicit target type (float args box as
+    /// double/int, matching the BindableProperty's expectations). Cold path — the
+    /// boxes live once inside the cached plan.
+    /// </summary>
     private static class Boxed
     {
         public static object Double(double v) => v;

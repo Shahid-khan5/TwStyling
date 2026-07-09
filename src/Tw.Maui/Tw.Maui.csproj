@@ -8,11 +8,38 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Tw.Maui</RootNamespace>
     <SingleProject>true</SingleProject>
+
+    <IsPackable>true</IsPackable>
+    <PackageId>Tw.Maui</PackageId>
+    <Title>Tw.Maui — Tailwind utility styling for .NET MAUI</Title>
+    <Description>Style native MAUI controls with the Tailwind class vocabulary: tw:Tw.Class in XAML, .Tw("...") in C#. Includes a Roslyn analyzer that validates class strings at build time and a source generator that precompiles literal classes into cached style plans, so applying a class at runtime is a dictionary hit rather than a parse.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
     <ProjectReference Include="..\Tw.Core\Tw.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Build-order only: these ship as analyzer assets, not as referenced assemblies. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Tw.Analyzers\Tw.Analyzers.csproj"
+                      PrivateAssets="all" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Tw.Generators\Tw.Generators.csproj"
+                      PrivateAssets="all" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\Tw.Analyzers\bin\$(Configuration)\netstandard2.0\Tw.Analyzers.dll"
+          Pack="true" PackagePath="analyzers\dotnet\cs" Visible="false" />
+    <None Include="..\Tw.Generators\bin\$(Configuration)\netstandard2.0\Tw.Generators.dll"
+          Pack="true" PackagePath="analyzers\dotnet\cs" Visible="false" />
+
+    <!-- NuGet auto-imports build\$(PackageId).props/.targets into consuming projects.
+         Update, not Include: the SDK's default None glob already picked these up. -->
+    <None Update="build\Tw.Maui.props" Pack="true" PackagePath="build\Tw.Maui.props" />
+    <None Update="build\Tw.Maui.targets" Pack="true" PackagePath="build\Tw.Maui.targets" />
   </ItemGroup>
 
 </Project>

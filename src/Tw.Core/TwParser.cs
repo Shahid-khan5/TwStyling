@@ -124,7 +124,7 @@ internal static class TwParser
                 output.Add(new(TwPropertyId.FontItalic, TwValue.Scalar(0)));
                 return true;
             case "border":
-                output.Add(new(TwPropertyId.BorderWidth, TwValue.Scalar(1)));
+                output.Add(new(TwPropertyId.BorderWidth, TwValue.Edges(1, 1, 1, 1)));
                 return true;
             case "rounded":
                 output.Add(new(TwPropertyId.CornerRadius, UniformCorners(TwTables.Radii[""])));
@@ -277,6 +277,23 @@ internal static class TwParser
             case "animate-none":
                 output.Add(new(TwPropertyId.Keyframes, TwValue.Enum((byte)TwKeyframes.None)));
                 return true;
+            case "pointer-events-none":
+                output.Add(new(TwPropertyId.PointerEventsNone, TwValue.Scalar(1)));
+                return true;
+            case "pointer-events-auto":
+                output.Add(new(TwPropertyId.PointerEventsNone, TwValue.Scalar(0)));
+                return true;
+            case "whitespace-nowrap":
+                output.Add(new(TwPropertyId.LineBreak, TwValue.Enum((byte)TwLineBreak.NoWrap)));
+                return true;
+            case "whitespace-normal":
+            case "break-normal":
+            case "break-words":
+                output.Add(new(TwPropertyId.LineBreak, TwValue.Enum((byte)TwLineBreak.WordWrap)));
+                return true;
+            case "break-all":
+                output.Add(new(TwPropertyId.LineBreak, TwValue.Enum((byte)TwLineBreak.CharacterWrap)));
+                return true;
         }
 
         if (TryPrefix(u, "bg-gradient-to-", out var arg))
@@ -359,7 +376,14 @@ internal static class TwParser
                 output.Add(new(TwPropertyId.LineHeight, TwValue.Scalar(multiplier)));
                 return true;
             }
-            error = $"unknown line height '{arg.ToString()}' (numeric leading-* is not supported in v0)";
+            // Numeric leading: leading-6 = 1.5rem = 24px absolute. Stored as an absolute
+            // length; the adapter divides by the element's font size for MAUI's multiplier.
+            if (SpanParse.PositiveInt(arg, out int steps))
+            {
+                output.Add(new(TwPropertyId.LineHeight, TwValue.AbsoluteLength(steps * TwTables.SpacingUnit)));
+                return true;
+            }
+            error = $"unknown line height '{arg.ToString()}'";
             return false;
         }
 
@@ -381,8 +405,14 @@ internal static class TwParser
                 output.Add(new(TwPropertyId.Shadow, shadow));
                 return true;
             }
-            error = $"unknown shadow '{arg.ToString()}' (colored shadows are not supported in v0)";
-            return false;
+            if (arg is "inner")
+            {
+                error = "'shadow-inner' (inset shadow) has no native equivalent";
+                return false;
+            }
+            // Otherwise it's a shadow color tint (shadow-blue-500, shadow-black/25,
+            // shadow-[#hex]). Pairs with a shadow-{size} utility to take effect.
+            return TryColor(arg, TwPropertyId.ShadowColor, output, ref error);
         }
 
         if (TryPrefix(u, "rounded-", out arg))
@@ -390,10 +420,27 @@ internal static class TwParser
 
         if (TryPrefix(u, "border-", out arg))
         {
-            // width: border-0/2/4/8; anything else is a color
-            if (arg.Length == 1 && arg[0] is '0' or '2' or '4' or '8')
+            // Per-side / axis widths: border-{t,r,b,l,x,y}[-n]. Encoded as Edges with NaN
+            // for unspecified sides so partial widths side-merge like padding
+            // (border border-t-0 → all sides 1, top 0). MAUI renders these uniformly
+            // (its StrokeThickness is a single double); a per-side-capable adapter (WPF)
+            // reads the full Edges. See COVERAGE.md.
+            if (TryBorderSide(arg, out Sides borderSides, out var widthArg))
             {
-                output.Add(new(TwPropertyId.BorderWidth, TwValue.Scalar(arg[0] - '0')));
+                if (negative) { error = "negative border width is not valid"; return false; }
+                if (!TryBorderWidth(widthArg, out float sideWidth))
+                {
+                    error = $"invalid border width '{widthArg.ToString()}'";
+                    return false;
+                }
+                output.Add(new(TwPropertyId.BorderWidth, EdgesFor(borderSides, sideWidth)));
+                return true;
+            }
+            // Uniform width: border-0/2/4/8, border-3, border-[3px]. A bare integer or
+            // bracketed length is a width; everything else (red-500, [#fff]) is a color.
+            if (IsWidthLike(arg) && TryBorderWidth(arg, out float uniform))
+            {
+                output.Add(new(TwPropertyId.BorderWidth, TwValue.Edges(uniform, uniform, uniform, uniform)));
                 return true;
             }
             return TryColor(arg, TwPropertyId.BorderColor, output, ref error);
@@ -449,6 +496,28 @@ internal static class TwParser
             return false;
         }
 
+        if (TryPrefix(u, "scale-x-", out arg))
+        {
+            if (TryNumber(arg, "%", out float pct))
+            {
+                output.Add(new(TwPropertyId.ScaleX, TwValue.Scalar((negative ? -pct : pct) / 100f)));
+                return true;
+            }
+            error = $"scale-x expects a percentage, got '{arg.ToString()}'";
+            return false;
+        }
+
+        if (TryPrefix(u, "scale-y-", out arg))
+        {
+            if (TryNumber(arg, "%", out float pct))
+            {
+                output.Add(new(TwPropertyId.ScaleY, TwValue.Scalar((negative ? -pct : pct) / 100f)));
+                return true;
+            }
+            error = $"scale-y expects a percentage, got '{arg.ToString()}'";
+            return false;
+        }
+
         if (TryPrefix(u, "scale-", out arg))
         {
             if (TryNumber(arg, "%", out float pct))
@@ -458,6 +527,93 @@ internal static class TwParser
             }
             error = $"scale expects a percentage, got '{arg.ToString()}'";
             return false;
+        }
+
+        if (TryPrefix(u, "origin-", out arg))
+        {
+            // transform-origin → an (x, y) anchor in 0..1 (center is 0.5, 0.5).
+            (float X, float Y)? anchor = arg switch
+            {
+                "center" => (0.5f, 0.5f),
+                "top" => (0.5f, 0f),
+                "top-right" => (1f, 0f),
+                "right" => (1f, 0.5f),
+                "bottom-right" => (1f, 1f),
+                "bottom" => (0.5f, 1f),
+                "bottom-left" => (0f, 1f),
+                "left" => (0f, 0.5f),
+                "top-left" => (0f, 0f),
+                _ => null,
+            };
+            if (anchor is { } a)
+            {
+                output.Add(new(TwPropertyId.TransformOriginX, TwValue.Scalar(a.X)));
+                output.Add(new(TwPropertyId.TransformOriginY, TwValue.Scalar(a.Y)));
+                return true;
+            }
+            error = $"unknown transform origin '{arg.ToString()}'";
+            return false;
+        }
+
+        if (TryPrefix(u, "object-", out arg))
+        {
+            TwObjectFit? fit = arg switch
+            {
+                "contain" => TwObjectFit.Contain,
+                "cover" => TwObjectFit.Cover,
+                "fill" => TwObjectFit.Fill,
+                "none" => TwObjectFit.None,
+                "scale-down" => TwObjectFit.ScaleDown,
+                _ => null,
+            };
+            if (fit is { } f)
+            {
+                output.Add(new(TwPropertyId.ObjectFit, TwValue.Enum((byte)f)));
+                return true;
+            }
+            error = arg is "top" or "bottom" or "left" or "right" or "center"
+                    or "left-top" or "left-bottom" or "right-top" or "right-bottom"
+                ? "object-position is not supported — MAUI images have no position anchor (use object-cover/contain/fill)"
+                : $"unknown object-fit '{arg.ToString()}'";
+            return false;
+        }
+
+        if (TryPrefix(u, "content-", out arg))
+        {
+            TwAlignContent? content = arg switch
+            {
+                "start" or "normal" => TwAlignContent.Start,
+                "end" => TwAlignContent.End,
+                "center" => TwAlignContent.Center,
+                "between" => TwAlignContent.Between,
+                "around" => TwAlignContent.Around,
+                "evenly" => TwAlignContent.Evenly,
+                "stretch" => TwAlignContent.Stretch,
+                _ => null,
+            };
+            if (content is { } c)
+            {
+                output.Add(new(TwPropertyId.AlignContent, TwValue.Enum((byte)c)));
+                return true;
+            }
+            error = $"unknown align-content '{arg.ToString()}'";
+            return false;
+        }
+
+        if (TryPrefix(u, "order-", out arg))
+        {
+            int order;
+            if (arg is "first") order = -9999;
+            else if (arg is "last") order = 9999;
+            else if (arg is "none") order = 0;
+            else if (SpanParse.PositiveInt(arg, out int n)) order = negative ? -n : n;
+            else
+            {
+                error = $"order expects an integer, first, last, or none, got '{arg.ToString()}'";
+                return false;
+            }
+            output.Add(new(TwPropertyId.Order, TwValue.Scalar(order)));
+            return true;
         }
 
         if (TryPrefix(u, "translate-x-", out arg))
@@ -690,6 +846,19 @@ internal static class TwParser
             return true;
         }
 
+        // Arbitrary font size: text-[17] / text-[17px]. Arbitrary colors (text-[#fff])
+        // start with '#' and fall through to the color path below.
+        if (arg.Length >= 2 && arg[0] == '[' && arg[^1] == ']' && arg[1] != '#')
+        {
+            if (TryNumber(arg, "px", out float px) && px > 0)
+            {
+                output.Add(new(TwPropertyId.FontSize, TwValue.Scalar(px)));
+                return true;
+            }
+            error = $"invalid arbitrary text size '{arg.ToString()}'";
+            return false;
+        }
+
         return TryColor(arg, TwPropertyId.TextColor, output, ref error);
     }
 
@@ -764,6 +933,21 @@ internal static class TwParser
         {
             output.Add(new(property, TwValue.Scalar(0)));
             return true;
+        }
+        if (arg.IndexOf('/') > 0)
+        {
+            error = "fractional sizes (w-1/2) aren't supported natively — use flex basis-1/2, grid-cols-*, or w-full";
+            return false;
+        }
+        if (arg is "auto")
+        {
+            // width/height auto is MAUI's default sizing — emitting nothing is correct.
+            return true;
+        }
+        if (arg is "fit" or "min" or "max")
+        {
+            error = $"'{property.ToString().ToLowerInvariant()}-{arg.ToString()}' (content sizing) has no native equivalent — MAUI sizes to content by default";
+            return false;
         }
         if (TrySpacing(arg, out float v, ref error))
         {
@@ -968,6 +1152,55 @@ internal static class TwParser
     [Flags]
     private enum Corners : byte { None = 0, TopLeft = 1, TopRight = 2, BottomLeft = 4, BottomRight = 8, All = 15 }
 
+    /// <summary>Matches border-{t,r,b,l,x,y}[-width]. Bare "border-t" → width span empty (=1).</summary>
+    private static bool TryBorderSide(ReadOnlySpan<char> arg, out Sides sides, out ReadOnlySpan<char> width)
+    {
+        width = default;
+        sides = arg.Length == 0 ? Sides.None : arg[0] switch
+        {
+            't' => Sides.Top,
+            'r' => Sides.Right,
+            'b' => Sides.Bottom,
+            'l' => Sides.Left,
+            'x' => Sides.Left | Sides.Right,
+            'y' => Sides.Top | Sides.Bottom,
+            _ => Sides.None,
+        };
+        if (sides == Sides.None) return false;
+        if (arg.Length == 1) return true;           // bare side (border-t)
+        if (arg[1] != '-') { sides = Sides.None; return false; } // a color like "blue-500"
+        width = arg[2..];
+        return true;
+    }
+
+    /// <summary>A width token is a bare number, empty (bare side = 1), or a bracketed length.</summary>
+    private static bool IsWidthLike(ReadOnlySpan<char> arg)
+    {
+        if (arg.Length == 0) return true;
+        if (arg[0] == '[') return arg.Length >= 2 && arg[1] != '#'; // [3px] yes, [#fff] no
+        foreach (var c in arg) if (!char.IsDigit(c)) return false;
+        return true;
+    }
+
+    /// <summary>Border width in DIU: bare (=1), integer, or arbitrary "[Npx]".</summary>
+    private static bool TryBorderWidth(ReadOnlySpan<char> arg, out float width)
+    {
+        width = 1;
+        if (arg.Length == 0) return true; // bare side
+        if (arg.Length >= 2 && arg[0] == '[' && arg[^1] == ']')
+        {
+            var inner = arg[1..^1];
+            if (inner.EndsWith("px", StringComparison.Ordinal)) inner = inner[..^2];
+            return SpanParse.Float(inner, out width);
+        }
+        if (SpanParse.PositiveInt(arg, out int n))
+        {
+            width = n;
+            return true;
+        }
+        return false;
+    }
+
     private static TwValue EdgesFor(Sides sides, float v) => TwValue.Edges(
         (sides & Sides.Left) != 0 ? v : float.NaN,
         (sides & Sides.Top) != 0 ? v : float.NaN,
@@ -990,10 +1223,24 @@ internal static class TwParser
         if (u is "w-screen" or "h-screen") return "'*-screen' is not supported — use w-full/h-full on a root element";
         if (u.StartsWith("divide-", StringComparison.Ordinal)) return "'divide-*' is not supported in v0 — style children directly";
         if (u.StartsWith("space-", StringComparison.Ordinal)) return "'space-*' is not supported — use gap-* on the layout instead";
-        if (u.StartsWith("ring-", StringComparison.Ordinal)) return "'ring-*' is not supported in v0 — use border-* or shadow-*";
+        if (u.StartsWith("ring-", StringComparison.Ordinal) || u is "ring") return "'ring-*' is not supported — use border-* or shadow-*";
+        if (u.StartsWith("aspect-", StringComparison.Ordinal)) return "'aspect-*' has no native equivalent — set WidthRequest/HeightRequest explicitly";
+        if (u.StartsWith("cursor-", StringComparison.Ordinal)) return "'cursor-*' is web-only chrome with no MAUI property";
+        if (u.StartsWith("select-", StringComparison.Ordinal)) return "'select-*' (user-select) has no native equivalent";
+        if (u.StartsWith("skew-", StringComparison.Ordinal)) return "'skew-*' is not supported — MAUI has no skew transform";
+        if (u.StartsWith("blur", StringComparison.Ordinal) || u.StartsWith("backdrop-", StringComparison.Ordinal)
+            || u.StartsWith("brightness-", StringComparison.Ordinal) || u.StartsWith("contrast-", StringComparison.Ordinal)
+            || u.StartsWith("saturate-", StringComparison.Ordinal) || u is "grayscale" or "invert" or "sepia")
+            return "CSS filters (blur/brightness/backdrop-*/…) have no native equivalent";
+        if (u.StartsWith("accent-", StringComparison.Ordinal) || u.StartsWith("caret-", StringComparison.Ordinal))
+            return "form accent/caret colors are not modeled — set the control's own color properties";
         if (u.StartsWith("animate-", StringComparison.Ordinal))
             return "unknown animation — supported: animate-spin, animate-pulse, animate-bounce, animate-none";
-        if (u.StartsWith("hover:", StringComparison.Ordinal)) return "variants go before the utility, e.g. hover:bg-blue-700";
+        if (u is "absolute" or "relative" or "fixed" or "sticky"
+            || u.StartsWith("top-", StringComparison.Ordinal) || u.StartsWith("bottom-", StringComparison.Ordinal)
+            || u.StartsWith("left-", StringComparison.Ordinal) || u.StartsWith("right-", StringComparison.Ordinal)
+            || u.StartsWith("inset-", StringComparison.Ordinal))
+            return "CSS positioning has no native equivalent — use layout containers, margins, or translate-x/y";
         return null;
     }
 }

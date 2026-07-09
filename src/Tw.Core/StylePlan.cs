@@ -9,6 +9,14 @@ public sealed class StylePlan
 {
     public static readonly StylePlan Empty = new([], [], [], [], []);
 
+    /// <summary>
+    /// Construction surface for source-generated (pre-lowered) plans. Generated code
+    /// was validated at build time, so it carries no diagnostics.
+    /// </summary>
+    public static StylePlan Precompiled(
+        TwDeclaration[] light, TwDeclaration[] dark, StatePlan[] states, BreakpointPlan[] breakpoints) =>
+        new(light, dark, states, breakpoints, []);
+
     /// <summary>Declarations for the normal state, light theme.</summary>
     public readonly TwDeclaration[] Light;
 
@@ -176,11 +184,17 @@ internal static class StylePlanCompiler
         }
     }
 
+    /// <summary>
+    /// Composition precedence (later wins when states are simultaneously active):
+    /// on desktop, pressing implies hovering, so Pressed must come AFTER Hover or
+    /// hover:bg-* would override pressed:bg-* while the mouse is down. This matches
+    /// Tailwind's own emission order (active after hover). Disabled trumps all.
+    /// </summary>
     private static readonly TwInteractiveState[] StateOrder =
     [
-        TwInteractiveState.Pressed,
         TwInteractiveState.Hover,
         TwInteractiveState.Focus,
+        TwInteractiveState.Pressed,
         TwInteractiveState.Disabled,
     ];
 

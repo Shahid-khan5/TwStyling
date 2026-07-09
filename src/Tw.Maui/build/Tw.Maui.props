@@ -1,0 +1,11 @@
+<Project>
+
+  <PropertyGroup>
+    <!--
+      Build-time precompilation of literal Tailwind class strings. Set to false to fall back to
+      the pure runtime parser (classes are then parsed on first use instead of at compile time).
+    -->
+    <TwPrecompile Condition="'$(TwPrecompile)' == ''">true</TwPrecompile>
+  </PropertyGroup>
+
+</Project>

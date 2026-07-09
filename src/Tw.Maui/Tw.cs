@@ -94,6 +94,15 @@ public static class TwRuntime
     /// <summary>Optional extra sink for diagnostics (logging, telemetry).</summary>
     public static Action<TwDiagnostic>? DiagnosticSink { get; set; }
 
+    /// <summary>
+    /// When true, the engine reports a diagnostic whenever it parses a class string at
+    /// runtime (a cache miss not covered by build-time precompilation). Pair with
+    /// <see cref="TwDiagnosticMode.Throw"/> to fail the build/tests on any runtime parse.
+    /// </summary>
+    public static bool WarnOnRuntimeParse { get; set; }
+
+    private static Dictionary<string, StylePlan>? _pendingPreloads;
+
     /// <summary>The shared engine; environment is detected from the device on first use.</summary>
     public static TwEngine Engine
     {
@@ -102,7 +111,40 @@ public static class TwRuntime
             if (_engine is { } e) return e;
             lock (InitLock)
             {
-                return _engine ??= new TwEngine(DetectEnvironment(), ReportDiagnostic);
+                if (_engine is null)
+                {
+                    _engine = new TwEngine(DetectEnvironment(), ReportDiagnostic) { WarnOnRuntimeParse = WarnOnRuntimeParse };
+                    if (_pendingPreloads is { } pending)
+                    {
+                        foreach (var kv in pending)
+                            _engine.Preload(kv.Key, kv.Value);
+                        _pendingPreloads = null;
+                    }
+                }
+                return _engine;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Entry point for source-generated plans (module initializers run before the
+    /// engine exists, so preloads are buffered until first use).
+    /// </summary>
+    public static void Preload(string classes, StylePlan plan)
+    {
+        lock (InitLock)
+        {
+            if (_engine is { } e)
+            {
+                e.Preload(classes, plan);
+            }
+            else
+            {
+                // First-come wins, matching TwEngine.Preload's TryAdd semantics —
+                // which plan survives must not depend on engine-init timing.
+                _pendingPreloads ??= new Dictionary<string, StylePlan>(StringComparer.Ordinal);
+                if (!_pendingPreloads.ContainsKey(classes))
+                    _pendingPreloads[classes] = plan;
             }
         }
     }
@@ -143,251 +185,42 @@ public static class TwRuntime
 
     // ------------------------------------------------------------------ apply
 
-    /// <summary>Tracks whether an element has been styled before (drives transitions).</summary>
-    private static readonly BindableProperty AppliedProperty =
-        BindableProperty.CreateAttached("TwApplied", typeof(bool), typeof(TwRuntime), false);
-
     internal static void Apply(VisualElement element, string? classes)
     {
         var plan = Engine.GetPlan(classes);
-        if (ReferenceEquals(plan, StylePlan.Empty))
+        // An empty plan on a never-styled element is a no-op — but on a styled one
+        // it must reconcile to empty targets so every applied property is cleared
+        // (setting Class to null/"" means "remove my styling", not "keep it").
+        if (ReferenceEquals(plan, StylePlan.Empty) && !TwReconciler.HasApplied(element))
             return;
+        ApplyPlanFor(element, plan);
+    }
 
+    private static void ApplyPlanFor(VisualElement element, StylePlan plan)
+    {
         var mauiPlan = TwMauiPlan.Get(plan, element.GetType());
+        bool reapply = TwReconciler.HasApplied(element);
 
-        bool reapply = (bool)element.GetValue(AppliedProperty);
-        element.SetValue(AppliedProperty, true);
+        // Stop (and reset) any running keyframe loop BEFORE reconciling, so
+        // plan-declared rotate-*/opacity-* values land on top of the reset.
+        if (reapply)
+            TwKeyframeRunner.Stop(element);
 
-        if (reapply && mauiPlan.Transition is { } transition)
-            ApplyWithTransition(element, mauiPlan, transition);
+        if (mauiPlan.HasStates)
+            TwInteractionWiring.Wire(element, mauiPlan);
         else
-            ApplyPlan(element, mauiPlan);
+            TwReconciler.ClearStates(element);
+
+        // The reconciler is the whole styling loop: compute targets from the
+        // element's state vector, diff against what's applied, set/clear/tween.
+        TwReconciler.SetPlan(element, mauiPlan,
+            allowTween: reapply && mauiPlan.Transition is not null);
 
         if (mauiPlan.Keyframes != TwKeyframes.None)
             TwKeyframeRunner.Run(element, mauiPlan.Keyframes);
-        else if (reapply)
-            TwKeyframeRunner.Run(element, TwKeyframes.None); // abort a loop the old classes started
-
-        // VSM setters hold raw values (state setters AND the Normal-state restore
-        // values), so any element that has visual states and any theme-dependent
-        // value needs a full re-apply when the theme flips — otherwise leaving
-        // Pressed after a theme change restores the old theme's color.
-        if (mauiPlan.HasStates && (mauiPlan.AnyStateDiffersByTheme || mauiPlan.AnySetterDiffersByTheme))
-            ThemeTracker.Track(element);
 
         if (mauiPlan.Breakpoints.Length > 0)
             SizeTracker.Track(element);
-    }
-
-    private static void ApplyPlan(VisualElement element, TwMauiPlan plan)
-    {
-        ApplyEntries(element, plan.Setters);
-
-        // Responsive overlays: every tier at or below the current window width, in order.
-        if (plan.Breakpoints.Length > 0)
-        {
-            double width = element.Window?.Width
-                ?? Application.Current?.Windows.FirstOrDefault()?.Width
-                ?? double.NaN;
-            if (!double.IsNaN(width))
-            {
-                foreach (var (minWidth, entries) in plan.Breakpoints)
-                    if (width >= minWidth)
-                        ApplyEntries(element, entries);
-            }
-        }
-
-        if (plan.HasStates)
-        {
-            // With transition-*, VSM would snap between states — use the event-driven
-            // animator instead so pressed/hover/focus changes tween.
-            if (plan.Transition is not null)
-                TwInteractionAnimator.Wire(element, plan);
-            else
-                ApplyVisualStates(element, plan);
-        }
-    }
-
-    private static void ApplyEntries(VisualElement element, TwMauiPlan.Entry[] entries)
-    {
-        foreach (var entry in entries)
-        {
-            // Element-typed values (shapes/brushes/shadows) are wrapped in FreshValue
-            // factories so every element gets its own instance — never shared parents.
-            if (entry.Differs)
-                element.SetAppTheme(entry.Property, TwMauiPlan.Materialize(entry.Light), TwMauiPlan.Materialize(entry.Dark));
-            else
-                element.SetValue(entry.Property, TwMauiPlan.Materialize(entry.Light));
-        }
-    }
-
-    /// <summary>
-    /// Re-apply with animation: capture animatable values, apply the plan instantly,
-    /// then run the changed values from old to new. Covers opacity, transforms, and
-    /// background color — the properties transition-* names.
-    /// </summary>
-    private static void ApplyWithTransition(VisualElement element, TwMauiPlan plan, TwTransitionSpec spec)
-    {
-        var type = element.GetType();
-        var textColorProperty = (spec.Props & TwTransitionProps.Colors) != 0 ? TwProps.For(type, TwProps.TextColor) : null;
-        var fontSizeProperty = (spec.Props & TwTransitionProps.Sizes) != 0 ? TwProps.For(type, TwProps.FontSize) : null;
-
-        double preOpacity = element.Opacity, preTx = element.TranslationX, preTy = element.TranslationY;
-        double preScale = element.Scale, preRotation = element.Rotation;
-        double preWidth = element.WidthRequest, preHeight = element.HeightRequest;
-        var preBackground = element.BackgroundColor;
-        var preTextColor = textColorProperty is null ? null : element.GetValue(textColorProperty) as Color;
-        double preFontSize = fontSizeProperty is null ? 0 : (double)element.GetValue(fontSizeProperty)!;
-
-        ApplyPlan(element, plan);
-
-        var animation = new Animation();
-        bool any = false;
-
-        if ((spec.Props & TwTransitionProps.Opacity) != 0)
-            any |= Tween(animation, preOpacity, element.Opacity, v => element.Opacity = v);
-        if ((spec.Props & TwTransitionProps.Transform) != 0)
-        {
-            any |= Tween(animation, preTx, element.TranslationX, v => element.TranslationX = v);
-            any |= Tween(animation, preTy, element.TranslationY, v => element.TranslationY = v);
-            any |= Tween(animation, preScale, element.Scale, v => element.Scale = v);
-            any |= Tween(animation, preRotation, element.Rotation, v => element.Rotation = v);
-        }
-        if ((spec.Props & TwTransitionProps.Colors) != 0)
-        {
-            any |= TweenColor(animation, element, null, preBackground, element.BackgroundColor);
-            if (textColorProperty is not null)
-                any |= TweenColor(animation, element, textColorProperty, preTextColor, element.GetValue(textColorProperty) as Color);
-        }
-        if (fontSizeProperty is not null)
-        {
-            double postFontSize = (double)element.GetValue(fontSizeProperty)!;
-            any |= Tween(animation, preFontSize, postFontSize, v => element.SetValue(fontSizeProperty, v));
-        }
-        if ((spec.Props & TwTransitionProps.Sizes) != 0)
-        {
-            // Explicit size requests tween too (skip the -1 "unset" sentinel).
-            if (preWidth >= 0 && element.WidthRequest >= 0)
-                any |= Tween(animation, preWidth, element.WidthRequest, v => element.WidthRequest = v);
-            if (preHeight >= 0 && element.HeightRequest >= 0)
-                any |= Tween(animation, preHeight, element.HeightRequest, v => element.HeightRequest = v);
-        }
-
-        if (!any)
-            return;
-
-        void Commit() => animation.Commit(element, "TwTransition", 16, (uint)spec.DurationMs, TwColorMath.EasingOf(spec.Easing));
-        if (spec.DelayMs > 0)
-            element.Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(spec.DelayMs), Commit);
-        else
-            Commit();
-    }
-
-    private static bool Tween(Animation animation, double from, double to, Action<double> setter)
-    {
-        if (from.Equals(to))
-            return false;
-        setter(from);
-        animation.Add(0, 1, new Animation(setter, from, to));
-        return true;
-    }
-
-    /// <summary>Property null → BackgroundColor (a plain CLR property, not SetValue-able generically here).</summary>
-    private static bool TweenColor(Animation animation, VisualElement element, BindableProperty? property, Color? from, Color? to)
-    {
-        if (from is null || to is null || from.Equals(to))
-            return false;
-        if (property is null)
-        {
-            element.BackgroundColor = from;
-            animation.Add(0, 1, new Animation(v => element.BackgroundColor = TwColorMath.Lerp(from, to, (float)v)));
-        }
-        else
-        {
-            element.SetValue(property, from);
-            animation.Add(0, 1, new Animation(v => element.SetValue(property, TwColorMath.Lerp(from, to, (float)v))));
-        }
-        return true;
-    }
-
-    private static void ApplyVisualStates(VisualElement element, TwMauiPlan plan)
-    {
-        bool dark = Application.Current?.RequestedTheme == AppTheme.Dark;
-
-        var normal = new VisualState { Name = VisualStateManager.CommonStates.Normal };
-        var group = new VisualStateGroup { Name = "CommonStates" };
-        group.States.Add(normal);
-
-        var restored = new HashSet<BindableProperty>();
-        foreach (var state in plan.States)
-        {
-            var vs = new VisualState { Name = state.VisualState };
-            foreach (var entry in state.Entries)
-            {
-                vs.Setters.Add(new Setter
-                {
-                    Property = entry.Property,
-                    Value = TwMauiPlan.Materialize(dark ? entry.Dark : entry.Light),
-                });
-
-                // Normal must restore every property another state touches.
-                if (restored.Add(entry.Property))
-                {
-                    object? baseValue = entry.Property.DefaultValue;
-                    foreach (var s in plan.Setters)
-                    {
-                        if (s.Property == entry.Property)
-                        {
-                            baseValue = TwMauiPlan.Materialize(dark ? s.Dark : s.Light);
-                            break;
-                        }
-                    }
-                    normal.Setters.Add(new Setter { Property = entry.Property, Value = baseValue });
-                }
-            }
-            group.States.Add(vs);
-        }
-
-        var groups = new VisualStateGroupList { group };
-        VisualStateManager.SetVisualStateGroups(element, groups);
-    }
-
-    /// <summary>Re-applies tracked elements when the OS theme flips (VSM values are raw, not bindings).</summary>
-    private static class ThemeTracker
-    {
-        private static readonly List<WeakReference<VisualElement>> Tracked = [];
-        private static bool _subscribed;
-
-        public static void Track(VisualElement element)
-        {
-            lock (Tracked)
-            {
-                foreach (var wr in Tracked)
-                    if (wr.TryGetTarget(out var t) && ReferenceEquals(t, element))
-                        return;
-                Tracked.Add(new WeakReference<VisualElement>(element));
-
-                if (!_subscribed && Application.Current is { } app)
-                {
-                    app.RequestedThemeChanged += OnThemeChanged;
-                    _subscribed = true;
-                }
-            }
-        }
-
-        private static void OnThemeChanged(object? sender, AppThemeChangedEventArgs e)
-        {
-            List<VisualElement> alive = [];
-            lock (Tracked)
-            {
-                Tracked.RemoveAll(wr => !wr.TryGetTarget(out _));
-                foreach (var wr in Tracked)
-                    if (wr.TryGetTarget(out var el))
-                        alive.Add(el);
-            }
-            foreach (var el in alive)
-                Apply(el, Tw.EffectiveClass(el));
-        }
     }
 
     /// <summary>
@@ -397,8 +230,11 @@ public static class TwRuntime
     private static class SizeTracker
     {
         private static readonly List<WeakReference<VisualElement>> Tracked = [];
-        private static readonly HashSet<Window> Subscribed = [];
-        private static int _lastTier = -1;
+
+        /// <summary>Per-window tier state; weak keys so closed windows can collect.</summary>
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Window, TierState> Windows = new();
+
+        private sealed class TierState { public int Tier; }
 
         private static readonly float[] Tiers = [640, 768, 1024, 1280, 1536];
 
@@ -418,9 +254,14 @@ public static class TwRuntime
             }
 
             if (element.Window is { } window)
+            {
                 Subscribe(window);
+            }
             else
+            {
+                element.Loaded -= OnElementLoaded; // idempotent under repeated Track calls
                 element.Loaded += OnElementLoaded;
+            }
         }
 
         private static void OnElementLoaded(object? sender, EventArgs e)
@@ -430,26 +271,38 @@ public static class TwRuntime
             element.Loaded -= OnElementLoaded;
             if (element.Window is { } window)
                 Subscribe(window);
-            // Re-apply once attached: the first apply may have run without a window width.
-            TwRuntime.Apply(element, Tw.EffectiveClass(element));
+            // Reconcile once attached: the first apply may have run without a window width.
+            TwReconciler.EnvironmentChanged(element);
         }
 
         private static void Subscribe(Window window)
         {
-            lock (Subscribed)
+            lock (Windows)
             {
-                if (!Subscribed.Add(window))
+                if (Windows.TryGetValue(window, out _))
                     return;
+                var state = new TierState { Tier = TierOf(window.Width) };
+                Windows.Add(window, state);
+
+                void OnSizeChanged(object? s, EventArgs e)
+                {
+                    int tier = TierOf(window.Width);
+                    if (tier == state.Tier)
+                        return;
+                    state.Tier = tier;
+                    ReapplyFor(window);
+                }
+
+                window.SizeChanged += OnSizeChanged;
+                window.Destroying += (_, _) =>
+                {
+                    window.SizeChanged -= OnSizeChanged;
+                    lock (Windows)
+                    {
+                        Windows.Remove(window);
+                    }
+                };
             }
-            window.SizeChanged += (_, _) =>
-            {
-                int tier = TierOf(window.Width);
-                if (tier == _lastTier)
-                    return;
-                _lastTier = tier;
-                ReapplyAll();
-            };
-            _lastTier = TierOf(window.Width);
         }
 
         private static int TierOf(double width)
@@ -461,18 +314,18 @@ public static class TwRuntime
             return tier;
         }
 
-        private static void ReapplyAll()
+        private static void ReapplyFor(Window window)
         {
             List<VisualElement> alive = [];
             lock (Tracked)
             {
                 Tracked.RemoveAll(wr => !wr.TryGetTarget(out _));
                 foreach (var wr in Tracked)
-                    if (wr.TryGetTarget(out var el))
+                    if (wr.TryGetTarget(out var el) && ReferenceEquals(el.Window, window))
                         alive.Add(el);
             }
             foreach (var el in alive)
-                TwRuntime.Apply(el, Tw.EffectiveClass(el));
+                TwReconciler.EnvironmentChanged(el);
         }
     }
 }
@@ -490,6 +343,7 @@ public static class TwAppBuilderExtensions
         configure?.Invoke(options);
         TwRuntime.DiagnosticMode = options.DiagnosticMode;
         TwRuntime.DiagnosticSink = options.DiagnosticSink;
+        TwRuntime.WarnOnRuntimeParse = options.WarnOnRuntimeParse;
         return builder;
     }
 }
@@ -498,4 +352,11 @@ public sealed class TwOptions
 {
     public TwDiagnosticMode DiagnosticMode { get; set; } = TwDiagnosticMode.DebugOutput;
     public Action<TwDiagnostic>? DiagnosticSink { get; set; }
+
+    /// <summary>
+    /// Report a diagnostic whenever a class string is parsed at runtime instead of being
+    /// served from a build-time-precompiled plan. Combine with
+    /// <see cref="TwDiagnosticMode.Throw"/> to enforce "no runtime parsing".
+    /// </summary>
+    public bool WarnOnRuntimeParse { get; set; }
 }

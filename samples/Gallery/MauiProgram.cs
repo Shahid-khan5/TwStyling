@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.LifecycleEvents;
-using Tw.Components;
 using Tw.Maui;
 
 namespace Gallery;
@@ -18,7 +17,6 @@ public static class MauiProgram
 		var builder = MauiApp.CreateBuilder();
 		builder
 			.UseMauiApp<App>()
-			.UseTwComponents()
 			.UseTw(o => o.DiagnosticMode = TwDiagnosticMode.Throw)
 			.ConfigureFonts(fonts =>
 			{

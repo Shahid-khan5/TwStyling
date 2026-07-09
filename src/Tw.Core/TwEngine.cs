@@ -21,6 +21,16 @@ public sealed class TwEngine
     /// </summary>
     public Action<TwDiagnostic>? DiagnosticSink { get; set; }
 
+    /// <summary>
+    /// When true, <see cref="GetPlan"/> reports a diagnostic every time it has to parse a
+    /// class string at runtime — i.e. a cache miss that was not preloaded at build time.
+    /// With the source generator running, all literal XAML/C# class strings are preloaded,
+    /// so a runtime parse means a dynamic string (interpolation, binding) or a device-
+    /// dependent platform:/idiom: variant. Combine with a throwing sink to hard-enforce
+    /// "no runtime parsing" in CI. Off by default.
+    /// </summary>
+    public bool WarnOnRuntimeParse { get; set; }
+
     public TwEngine(TwEnvironment environment, Action<TwDiagnostic>? diagnosticSink = null)
     {
         Environment = environment;
@@ -36,11 +46,16 @@ public sealed class TwEngine
         if (_cache.TryGetValue(classes!, out var hit))
             return hit;
 
-        var plan = StylePlanCompiler.Compile(classes!, Environment);
-        plan = _cache.GetOrAdd(classes!, plan);
+        var compiled = StylePlanCompiler.Compile(classes!, Environment);
+        var plan = _cache.GetOrAdd(classes!, compiled);
 
-        if (plan.Diagnostics.Length > 0 && DiagnosticSink is { } sink)
+        // Report only from the thread that won the insert race — losers would
+        // duplicate every diagnostic (and double-throw in Throw mode).
+        if (ReferenceEquals(plan, compiled) && DiagnosticSink is { } sink)
         {
+            if (WarnOnRuntimeParse)
+                sink(new TwDiagnostic(classes!, "",
+                    "parsed at runtime — this class string was not precompiled (dynamic string, or a platform:/idiom: variant the generator skips)"));
             foreach (var d in plan.Diagnostics)
                 sink(d);
         }
@@ -58,6 +73,12 @@ public sealed class TwEngine
         TwParser.Parse(classes, diagnostics.Add);
         return diagnostics.ToArray();
     }
+
+    /// <summary>
+    /// Seeds the cache with a build-time-compiled plan (source generator output).
+    /// First-come wins; a preload never overwrites an existing entry.
+    /// </summary>
+    public void Preload(string classes, StylePlan plan) => _cache.TryAdd(classes, plan);
 
     /// <summary>Number of unique class strings compiled so far (observability/tests).</summary>
     public int CachedPlanCount => _cache.Count;

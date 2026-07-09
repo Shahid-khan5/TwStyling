@@ -3,3 +3,9 @@ obj/
 BenchmarkDotNet.Artifacts/
 *.user
 .vs/
+
+# Local package output
+artifacts/
+
+# Nested skills repo (published separately)
+/skills/

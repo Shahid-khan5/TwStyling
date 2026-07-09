@@ -4,8 +4,8 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Tw.Analyzers/Tw.Analyzers.csproj" />
-    <Project Path="src/Tw.Components/Tw.Components.csproj" />
     <Project Path="src/Tw.Core/Tw.Core.csproj" />
+    <Project Path="src/Tw.Generators/Tw.Generators.csproj" />
     <Project Path="src/Tw.Maui/Tw.Maui.csproj" />
   </Folder>
   <Folder Name="/tests/">

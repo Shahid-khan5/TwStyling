@@ -26,11 +26,21 @@ Or in C#: `new Label().Tw("text-xl font-bold")`.
 | `src/Tw.Core` | Framework-neutral engine: span-based parser, Tailwind token tables, resolver, cached `StylePlan`s. `net10.0` + `netstandard2.0`, zero UI references. |
 | `src/Tw.Maui` | MAUI adapter: `Tw.Class` attached property, per-control property mapping, VisualStateManager bridge, `dark:` via AppThemeBinding. |
 | `src/Tw.Analyzers` | Roslyn analyzer (TW0001): validates class-string literals in C# at build time using the same parser the runtime uses. |
+| `src/Tw.Generators` | Source generator (the `[GeneratedRegex]` evolution). Every literal `.Tw("...")` call in C# and every literal `tw:Tw.Class` / `Tw.ActiveClass` in XAML is parsed at build time into static `StylePlan` data, preloaded into the engine cache by a `[ModuleInitializer]`. At runtime, applying that class is a dictionary hit, not a parse. Invalid XAML classes become build **errors** (TWG001). Only genuinely dynamic strings — interpolation, bindings, and device-dependent `platform:`/`idiom:` variants — fall through to the runtime parser. C# and XAML share one preload path; there is no C#-only interceptor fast lane. Installing the `Tw.Maui` package wires this up automatically (set `<TwPrecompile>false</TwPrecompile>` to opt out). |
 | `samples/Gallery` | Demo app (Windows TFM for fast iteration) — the acceptance test: AI-idiom components pasted in unedited. |
 | `tests/Tw.Core.Tests` | Engine unit tests. |
 | `tests/Tw.Benchmarks` | BenchmarkDotNet perf contract. |
 
 ## Setup
+
+```
+dotnet add package Tw.Maui
+```
+
+That's the whole install. The package brings in `Tw.Core`, registers the analyzer and the
+source generator, and feeds your `.xaml` files to the generator so `tw:Tw.Class` literals are
+precompiled. Set `<TwPrecompile>false</TwPrecompile>` to turn precompilation off and parse
+classes at runtime instead; the analyzer keeps validating either way.
 
 ```csharp
 // MauiProgram.cs — optional; the engine self-initializes, this picks diagnostics behavior
@@ -81,20 +91,6 @@ Different font size / colors / anything based on a view-model boolean — with a
 
 `ActiveClass` utilities are appended (last-wins, like Tailwind) while `IsActive` is true. Both compositions are cached plans, so toggling is two dictionary lookups — and with `transition-*` in the base classes the switch animates.
 
-## Tw.Components
-
-A component library built entirely on the engine — every look is a utility-class preset, every unique composition compiles once:
-
-```csharp
-new TwButton { Text = "Get started", Variant = TwButtonVariant.Primary, Size = TwSize.Lg }
-new TwCard { Variant = TwCardVariant.Outlined, Class = "rounded-3xl" }  // Class overrides win
-new TwBadge { Text = "Beta", Variant = TwBadgeVariant.Warning }
-new TwInput { Placeholder = "you@example.com" }  // focus ring via cached class swap
-new TwAvatar { Text = "CF" }, new TwDivider()
-```
-
-`builder.UseTwComponents()` registers handler-mapper customizations (e.g. neutralizing WinUI's built-in button hover chrome so the `pressed:` classes own interaction feedback) — the MAUI-blessed way to adjust platform behavior.
-
 ## Performance model
 
 Class strings are static in practice, so everything is *compute once per unique string, share across all elements*:
@@ -126,6 +122,34 @@ Covers C# literals today; XAML validation via build task is planned. At runtime 
 ```powershell
 ./tools/gen-palette.ps1 -InputFile tools/colors-v3.4.17.js -OutputFile src/Tw.Core/Generated/TwPalette.g.cs
 ```
+
+## Releasing
+
+Two packages ship: `Tw.Core` (engine) and `Tw.Maui` (adapter, carrying the analyzer and generator
+as analyzer assets). The sample, tests, and benchmarks are not packable.
+
+Version lives in `Directory.Build.props`. To publish, push a `v`-prefixed tag — the Release workflow
+derives the version from it, packs, and pushes `Tw.Core` before `Tw.Maui`:
+
+```bash
+git tag v0.1.0-preview.1
+git push origin v0.1.0-preview.1
+```
+
+No secrets required: publishing uses nuget.org [Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing),
+which exchanges a GitHub OIDC token for a one-hour API key. The policy on nuget.org must match this
+repo exactly — owner `Shahid-khan5`, repo `Tw.Maui`, workflow `release.yml`, environment blank. If
+you ever add an `environment:` to the release job, set the same value on the policy or the exchange
+is rejected.
+
+To verify a package locally before tagging:
+
+```bash
+dotnet pack Tw.slnx -c Release -o artifacts
+```
+
+Package IDs are permanent and published versions are immutable — they can only be unlisted, never
+replaced. Ship preview versions until the surface settles.
 
 ## Roadmap
 

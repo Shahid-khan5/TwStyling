@@ -15,7 +15,6 @@
     <ShellContent Title="Spacing" ContentTemplate="{DataTemplate pages:SpacingPage}" Route="Spacing" />
     <ShellContent Title="Utilities" ContentTemplate="{DataTemplate pages:UtilitiesPage}" Route="Utilities" />
     <ShellContent Title="Layout" ContentTemplate="{DataTemplate pages:LayoutPage}" Route="Layout" />
-    <ShellContent Title="Library" ContentTemplate="{DataTemplate pages:LibraryPage}" Route="Library" />
     <ShellContent Title="VPN Demo" ContentTemplate="{DataTemplate pages:VpnDemoPage}" Route="VpnDemo" />
     <ShellContent Title="Web vs Native" ContentTemplate="{DataTemplate pages:ComparisonPage}" Route="Comparison" />
 

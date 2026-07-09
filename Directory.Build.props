@@ -1,0 +1,28 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- Opt in per-project; keeps tests, benchmarks and the Gallery sample out of the feed -->
+    <IsPackable>false</IsPackable>
+
+    <Version>0.1.0-preview.1</Version>
+    <Authors>Shahid Khan</Authors>
+    <Company>Shahid Khan</Company>
+    <Copyright>Copyright (c) 2026 Shahid Khan</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageProjectUrl>https://github.com/Shahid-khan5/Tw.Maui</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Shahid-khan5/Tw.Maui</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageTags>maui;tailwind;css;styling;ui;utility-classes;dotnet;xaml</PackageTags>
+
+    <!-- Symbols + SourceLink. The .NET SDK bundles SourceLink, so no PackageReference is needed. -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+</Project>

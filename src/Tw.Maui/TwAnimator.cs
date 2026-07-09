@@ -7,9 +7,37 @@ internal static class TwKeyframeRunner
 {
     private const string Handle = "TwKeyframes";
 
+    private static readonly BindableProperty KindProperty =
+        BindableProperty.CreateAttached("TwKeyframeKind", typeof(TwKeyframes), typeof(TwKeyframeRunner), TwKeyframes.None);
+
+    /// <summary>
+    /// Aborts a running loop and resets the property it was animating (a mid-cycle
+    /// abort would otherwise leave Rotation/Opacity/TranslationY frozen at an
+    /// arbitrary value — keyframe motion never appears in plan setters, so the
+    /// reconciler can't clear it). Runs BEFORE the plan applies, so plan-declared
+    /// rotate-*/opacity-* values land on top of the reset.
+    /// </summary>
+    public static TwKeyframes Stop(VisualElement element)
+    {
+        var previous = (TwKeyframes)element.GetValue(KindProperty);
+        if (previous == TwKeyframes.None)
+            return previous;
+
+        element.AbortAnimation(Handle);
+        switch (previous)
+        {
+            case TwKeyframes.Spin: element.Rotation = 0; break;
+            case TwKeyframes.Pulse: element.Opacity = 1; break;
+            case TwKeyframes.Bounce: element.TranslationY = 0; break;
+        }
+        element.SetValue(KindProperty, TwKeyframes.None);
+        return previous;
+    }
+
     public static void Run(VisualElement element, TwKeyframes kind)
     {
         element.AbortAnimation(Handle);
+        element.SetValue(KindProperty, kind);
 
         switch (kind)
         {
@@ -36,171 +64,86 @@ internal static class TwKeyframeRunner
 }
 
 /// <summary>
-/// Event-driven replacement for VisualStateManager when a plan carries transition-*:
-/// VSM setters snap, so instead we listen to the interaction events directly and
-/// tween between base and state values. Wired once per element; the current plan
-/// travels on an attached property so re-applies just swap it.
+/// Interactive state events, reduced to their essence: each event flips one bit in
+/// the reconciler's state vector and reconciles. No snapshots, no restore logic,
+/// no parallel styling path — enter and exit are the same operation. Whether the
+/// change tweens or snaps is the reconciler's call (plan has transition-* or not).
 /// </summary>
-internal static class TwInteractionAnimator
+internal static class TwInteractionWiring
 {
-    private const string Handle = "TwState";
+    public const int PressedBit = 1, HoverBit = 2, FocusBit = 4, DisabledBit = 8;
 
-    private static readonly BindableProperty PlanProperty =
-        BindableProperty.CreateAttached("TwAnimatorPlan", typeof(TwMauiPlan), typeof(TwInteractionAnimator), null);
-
+    /// <summary>Bitmask of events already subscribed on this element.</summary>
     private static readonly BindableProperty WiredProperty =
-        BindableProperty.CreateAttached("TwAnimatorWired", typeof(bool), typeof(TwInteractionAnimator), false);
+        BindableProperty.CreateAttached("TwWired", typeof(int), typeof(TwInteractionWiring), 0);
+
+    public static int BitOf(string visualState) => visualState switch
+    {
+        "Pressed" => PressedBit,
+        "PointerOver" => HoverBit,
+        "Focused" => FocusBit,
+        _ => DisabledBit,
+    };
 
     public static void Wire(VisualElement element, TwMauiPlan plan)
     {
-        element.SetValue(PlanProperty, plan);
-        if ((bool)element.GetValue(WiredProperty))
+        int needed = 0;
+        foreach (var state in plan.States)
+            needed |= BitOf(state.VisualState);
+
+        int wired = (int)element.GetValue(WiredProperty);
+        int missing = needed & ~wired;
+        if (missing == 0)
             return;
-        element.SetValue(WiredProperty, true);
+        element.SetValue(WiredProperty, wired | needed);
 
-        bool hasPressed = Has(plan, "Pressed");
-        bool hasHover = Has(plan, VisualStateManager.CommonStates.PointerOver);
-        bool hasFocus = Has(plan, VisualStateManager.CommonStates.Focused);
-        bool hasDisabled = Has(plan, VisualStateManager.CommonStates.Disabled);
-
-        if (hasPressed)
+        if ((missing & PressedBit) != 0)
         {
             switch (element)
             {
                 case Button button:
-                    button.Pressed += (s, _) => Enter((VisualElement)s!, "Pressed");
-                    button.Released += (s, _) => Exit((VisualElement)s!, "Pressed");
+                    button.Pressed += (s, _) => TwReconciler.SetState((VisualElement)s!, PressedBit, true);
+                    button.Released += (s, _) => TwReconciler.SetState((VisualElement)s!, PressedBit, false);
                     break;
                 case ImageButton imageButton:
-                    imageButton.Pressed += (s, _) => Enter((VisualElement)s!, "Pressed");
-                    imageButton.Released += (s, _) => Exit((VisualElement)s!, "Pressed");
+                    imageButton.Pressed += (s, _) => TwReconciler.SetState((VisualElement)s!, PressedBit, true);
+                    imageButton.Released += (s, _) => TwReconciler.SetState((VisualElement)s!, PressedBit, false);
                     break;
                 case View view:
                     var press = new PointerGestureRecognizer();
-                    press.PointerPressed += (s, _) => Enter(element, "Pressed");
-                    press.PointerReleased += (s, _) => Exit(element, "Pressed");
+                    press.PointerPressed += (_, _) => TwReconciler.SetState(element, PressedBit, true);
+                    press.PointerReleased += (_, _) => TwReconciler.SetState(element, PressedBit, false);
                     view.GestureRecognizers.Add(press);
                     break;
             }
         }
 
-        if (hasHover && element is View hoverView)
+        if ((missing & HoverBit) != 0 && element is View hoverView)
         {
             var hover = new PointerGestureRecognizer();
-            hover.PointerEntered += (_, _) => Enter(element, VisualStateManager.CommonStates.PointerOver);
-            hover.PointerExited += (_, _) => Exit(element, VisualStateManager.CommonStates.PointerOver);
+            hover.PointerEntered += (_, _) => TwReconciler.SetState(element, HoverBit, true);
+            hover.PointerExited += (_, _) => TwReconciler.SetState(element, HoverBit, false);
             hoverView.GestureRecognizers.Add(hover);
         }
 
-        if (hasFocus)
+        if ((missing & FocusBit) != 0)
         {
-            element.Focused += (s, _) => Enter((VisualElement)s!, VisualStateManager.CommonStates.Focused);
-            element.Unfocused += (s, _) => Exit((VisualElement)s!, VisualStateManager.CommonStates.Focused);
+            element.Focused += (s, _) => TwReconciler.SetState((VisualElement)s!, FocusBit, true);
+            element.Unfocused += (s, _) => TwReconciler.SetState((VisualElement)s!, FocusBit, false);
         }
 
-        if (hasDisabled)
+        if ((missing & DisabledBit) != 0)
         {
             element.PropertyChanged += (s, e) =>
             {
-                if (e.PropertyName != nameof(VisualElement.IsEnabled) || s is not VisualElement el)
-                    return;
-                if (el.IsEnabled)
-                    Exit(el, VisualStateManager.CommonStates.Disabled);
-                else
-                    Enter(el, VisualStateManager.CommonStates.Disabled);
+                if (e.PropertyName == nameof(VisualElement.IsEnabled) && s is VisualElement el)
+                    TwReconciler.SetState(el, DisabledBit, !el.IsEnabled);
             };
+            // Seed the current state: an initially-disabled element must get its
+            // disabled: styling without waiting for a PropertyChanged that never comes.
+            if (!element.IsEnabled)
+                TwReconciler.SetState(element, DisabledBit, true);
         }
-    }
-
-    private static bool Has(TwMauiPlan plan, string state)
-    {
-        foreach (var s in plan.States)
-            if (s.VisualState == state)
-                return true;
-        return false;
-    }
-
-    private static void Enter(VisualElement element, string state)
-    {
-        if (element.GetValue(PlanProperty) is not TwMauiPlan plan)
-            return;
-        bool dark = Application.Current?.RequestedTheme == AppTheme.Dark;
-
-        foreach (var stateEntries in plan.States)
-        {
-            if (stateEntries.VisualState != state)
-                continue;
-            var targets = new List<(BindableProperty, object?)>(stateEntries.Entries.Length);
-            foreach (var entry in stateEntries.Entries)
-                targets.Add((entry.Property, TwMauiPlan.Materialize(dark ? entry.Dark : entry.Light)));
-            AnimateTo(element, targets, plan);
-            return;
-        }
-    }
-
-    private static void Exit(VisualElement element, string state)
-    {
-        if (element.GetValue(PlanProperty) is not TwMauiPlan plan)
-            return;
-        bool dark = Application.Current?.RequestedTheme == AppTheme.Dark;
-
-        foreach (var stateEntries in plan.States)
-        {
-            if (stateEntries.VisualState != state)
-                continue;
-            // Restore each touched property to its base-plan value (or default).
-            var targets = new List<(BindableProperty, object?)>(stateEntries.Entries.Length);
-            foreach (var entry in stateEntries.Entries)
-            {
-                object? baseValue = entry.Property.DefaultValue;
-                foreach (var s in plan.Setters)
-                {
-                    if (s.Property == entry.Property)
-                    {
-                        baseValue = TwMauiPlan.Materialize(dark ? s.Dark : s.Light);
-                        break;
-                    }
-                }
-                targets.Add((entry.Property, baseValue));
-            }
-            AnimateTo(element, targets, plan);
-            return;
-        }
-    }
-
-    /// <summary>Tween colors and doubles toward targets; snap everything else.</summary>
-    private static void AnimateTo(VisualElement element, List<(BindableProperty Property, object? Target)> targets, TwMauiPlan plan)
-    {
-        var spec = plan.Transition!.Value;
-        var animation = new Animation();
-        bool any = false;
-
-        foreach (var (property, target) in targets)
-        {
-            object? current = element.GetValue(property);
-            if (current is Color from && target is Color to && !from.Equals(to)
-                && (spec.Props & TwTransitionProps.Colors) != 0)
-            {
-                animation.Add(0, 1, new Animation(v =>
-                    element.SetValue(property, TwColorMath.Lerp(from, to, (float)v))));
-                any = true;
-            }
-            else if (current is double d0 && target is double d1 && !d0.Equals(d1))
-            {
-                animation.Add(0, 1, new Animation(v => element.SetValue(property, v), d0, d1));
-                any = true;
-            }
-            else if (!Equals(current, target))
-            {
-                element.SetValue(property, target);
-            }
-        }
-
-        if (!any)
-            return;
-
-        element.AbortAnimation(Handle);
-        animation.Commit(element, Handle, 16, (uint)spec.DurationMs, TwColorMath.EasingOf(spec.Easing));
     }
 }
 

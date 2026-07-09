@@ -99,6 +99,20 @@ public class ExpandedUtilityTests
         Assert.Equal((byte)TwAlign.Center, (byte)Single("m-auto", TwPropertyId.AlignSelfY).Value.X);
     }
 
+    [Theory]
+    [InlineData("text-[17]", 17f)]
+    [InlineData("text-[17px]", 17f)]
+    public void Arbitrary_text_size(string cls, float expected) =>
+        Assert.Equal(expected, Single(cls, TwPropertyId.FontSize).Value.X);
+
+    [Fact]
+    public void Positioning_utilities_get_helpful_message()
+    {
+        var diags = TwEngine.Validate("absolute top-4 inset-0");
+        Assert.Equal(3, diags.Length);
+        Assert.All(diags, d => Assert.Contains("positioning", d.Message));
+    }
+
     [Fact]
     public void Capitalize_and_screen_get_helpful_messages()
     {

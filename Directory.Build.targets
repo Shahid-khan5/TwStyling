@@ -1,0 +1,12 @@
+<Project>
+
+  <!--
+    Imported after each .csproj body, so $(IsPackable) reflects the project's own choice.
+    The same ItemGroup in Directory.Build.props would evaluate while IsPackable is still false.
+  -->
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

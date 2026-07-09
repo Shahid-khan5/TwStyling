@@ -90,6 +90,59 @@ public enum TwPropertyId : byte
     TransitionEasing,
     /// <summary>Enum: <see cref="TwKeyframes"/> (animate-*).</summary>
     Keyframes,
+    /// <summary>Enum: <see cref="TwObjectFit"/> (object-cover / object-contain…). Image only.</summary>
+    ObjectFit,
+    /// <summary>Scalar: horizontal scale factor (scale-x-*). Negative flips.</summary>
+    ScaleX,
+    /// <summary>Scalar: vertical scale factor (scale-y-*). Negative flips.</summary>
+    ScaleY,
+    /// <summary>Scalar 0–1: transform-origin X anchor (origin-*).</summary>
+    TransformOriginX,
+    /// <summary>Scalar 0–1: transform-origin Y anchor (origin-*).</summary>
+    TransformOriginY,
+    /// <summary>Scalar bool: pointer-events-none → 1 (input transparent), pointer-events-auto → 0.</summary>
+    PointerEventsNone,
+    /// <summary>Enum: <see cref="TwAlignContent"/> (content-*). FlexLayout only.</summary>
+    AlignContent,
+    /// <summary>Scalar: flex order (order-*). FlexLayout child.</summary>
+    Order,
+    /// <summary>Enum: <see cref="TwLineBreak"/> (whitespace-* / break-*). Label only.</summary>
+    LineBreak,
+    /// <summary>Color: shadow tint (shadow-{color}). Folds into <see cref="Shadow"/>'s brush.</summary>
+    ShadowColor,
+}
+
+/// <summary>object-fit values (object-*). Maps to the platform image scaling mode.</summary>
+public enum TwObjectFit : byte
+{
+    Contain = 0,
+    Cover = 1,
+    Fill = 2,
+    None = 3,
+    ScaleDown = 4,
+}
+
+/// <summary>align-content values (content-*).</summary>
+public enum TwAlignContent : byte
+{
+    Start = 0,
+    End = 1,
+    Center = 2,
+    Between = 3,
+    Around = 4,
+    Evenly = 5,
+    Stretch = 6,
+}
+
+/// <summary>Text line-break behavior (whitespace-* / break-*).</summary>
+public enum TwLineBreak : byte
+{
+    /// <summary>whitespace-normal / break-words — wrap on word boundaries.</summary>
+    WordWrap = 0,
+    /// <summary>break-all — wrap on any character.</summary>
+    CharacterWrap = 1,
+    /// <summary>whitespace-nowrap — never wrap.</summary>
+    NoWrap = 2,
 }
 
 /// <summary>Built-in looping keyframe animations (animate-*).</summary>
@@ -250,6 +303,10 @@ public readonly struct TwValue
     }
 
     public static TwValue Scalar(float value) => new(TwValueKind.Scalar, 0, value, 0, 0, 0);
+    /// <summary>A length in absolute DIU (numeric leading-*), tagged (Y=1) so the adapter divides by font size.</summary>
+    public static TwValue AbsoluteLength(float diu) => new(TwValueKind.Scalar, 0, diu, 1, 0, 0);
+    /// <summary>True when this scalar carries an absolute length that needs font-size conversion.</summary>
+    public bool IsAbsoluteLength => Kind == TwValueKind.Scalar && Y > 0;
     public static TwValue Color(uint rgba) => new(TwValueKind.Color, rgba, 0, 0, 0, 0);
     public static TwValue Edges(float left, float top, float right, float bottom) =>
         new(TwValueKind.Edges, 0, left, top, right, bottom);
@@ -260,6 +317,22 @@ public readonly struct TwValue
     public static TwValue Enum(byte ordinal) => new(TwValueKind.Enum, 0, ordinal, 0, 0, 0);
 
     public bool IsFull => Kind == TwValueKind.Scalar && float.IsPositiveInfinity(X);
+
+    /// <summary>
+    /// Reduces a per-side Edges value to the single width a uniform-stroke renderer
+    /// (MAUI's <c>StrokeThickness</c>) can carry: exact when all sides are equal, else
+    /// the largest specified side as a best-effort approximation. NaN (unset) sides are
+    /// ignored. A framework with a per-side border thickness (WPF) reads X/Y/Z/W directly.
+    /// </summary>
+    public float UniformEdge()
+    {
+        float max = 0f;
+        if (!float.IsNaN(X) && X > max) max = X;
+        if (!float.IsNaN(Y) && Y > max) max = Y;
+        if (!float.IsNaN(Z) && Z > max) max = Z;
+        if (!float.IsNaN(W) && W > max) max = W;
+        return max;
+    }
 }
 
 /// <summary>One resolved (property, value) pair inside a compiled plan.</summary>

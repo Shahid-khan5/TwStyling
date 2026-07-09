@@ -161,6 +161,20 @@ public class LayoutUtilityTests
         Assert.Equal(1f, Single("overflow-hidden", TwPropertyId.Clip).Value.X);
     }
 
+    [Fact]
+    public void Pressed_outranks_hover_when_states_compose()
+    {
+        // Desktop: pressing implies hovering — both active simultaneously. The plan's
+        // state order IS the composition precedence (later wins), so Pressed must
+        // come after Hover or hover styles would win while the mouse is down.
+        var plan = Engine.GetPlan("hover:bg-blue-600 pressed:bg-blue-800 focus:bg-blue-500");
+        int hover = Array.FindIndex(plan.States, s => s.State == TwInteractiveState.Hover);
+        int pressed = Array.FindIndex(plan.States, s => s.State == TwInteractiveState.Pressed);
+        int focus = Array.FindIndex(plan.States, s => s.State == TwInteractiveState.Focus);
+        Assert.True(hover < pressed, "Hover must precede Pressed so Pressed overrides it");
+        Assert.True(focus < pressed, "Focus must precede Pressed so Pressed overrides it");
+    }
+
     // ---------------------------------------------------------------- state borders (review fix)
 
     [Fact]
