@@ -36,16 +36,18 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Restore workloads
-        run: dotnet workload restore Tw.slnx
-
-      - name: Build
-        run: dotnet build Tw.slnx -c Release -p:Version=${{ env.VERSION }}
+        run: dotnet workload restore src/Tw.Maui/Tw.Maui.csproj
 
       - name: Test
-        run: dotnet test tests/Tw.Core.Tests/Tw.Core.Tests.csproj -c Release --no-build
+        run: dotnet test tests/Tw.Core.Tests/Tw.Core.Tests.csproj -c Release
 
+      # Only the two packable projects. The Gallery sample is deliberately not built
+      # here: it is a WinExe needing the win-x64 runtime pack, and nothing about
+      # shipping the packages depends on it.
       - name: Pack
-        run: dotnet pack Tw.slnx -c Release --no-build -o artifacts -p:Version=${{ env.VERSION }}
+        run: |
+          dotnet pack src/Tw.Core/Tw.Core.csproj -c Release -o artifacts -p:Version=${{ env.VERSION }}
+          dotnet pack src/Tw.Maui/Tw.Maui.csproj -c Release -o artifacts -p:Version=${{ env.VERSION }}
 
       # Runs last, right before the pushes: the key it returns expires after 1 hour.
       # `user` is the nuget.org profile name that owns the packages — not an email.
