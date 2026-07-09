@@ -1,9 +1,16 @@
 name: Release
 
 # Tag the commit you want to ship, e.g.:  git tag v0.1.0-preview.1 && git push origin v0.1.0-preview.1
+# Or run it by hand from the Actions tab with an explicit version.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to pack and publish, e.g. 0.1.0-preview.2'
+        required: true
+        type: string
 
 concurrency:
   group: release-${{ github.ref }}
@@ -31,9 +38,14 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Derive version from tag
+      - name: Resolve version
         shell: bash
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
 
       - name: Restore workloads
         run: dotnet workload restore src/Tw.Maui/Tw.Maui.csproj
@@ -60,21 +72,42 @@ jobs:
       # Tw.Core first: Tw.Maui depends on it. Pushing the dependent package before its
       # dependency is indexed leaves it briefly uninstallable.
       # Each .nupkg push carries its matching .snupkg symbol package automatically.
+      #
+      # No --skip-duplicate. It swallows HTTP 409 and reports success, which turned a
+      # release that published nothing into a green run. A conflict here is a real
+      # problem and must fail the workflow.
       - name: Push Tw.Core
         run: >
           dotnet nuget push artifacts/Tw.Core.${{ env.VERSION }}.nupkg
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
-          --skip-duplicate
 
       - name: Push Tw.Maui
         run: >
           dotnet nuget push artifacts/Tw.Maui.${{ env.VERSION }}.nupkg
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
-          --skip-duplicate
+
+      # Only on failure. `dotnet nuget push` reports the status code but not the body,
+      # and the body is where nuget.org explains *why* it rejected the push. Replaying
+      # the same PUT with curl cannot double-publish: if the real push had succeeded,
+      # this step never runs.
+      - name: Explain push failure
+        if: failure() && steps.login.outcome == 'success'
+        shell: bash
+        run: |
+          for pkg in Tw.Core Tw.Maui; do
+            echo "===== PUT $pkg.$VERSION.nupkg ====="
+            curl -sS -i -X PUT \
+              -H "X-NuGet-ApiKey: ${{ steps.login.outputs.NUGET_API_KEY }}" \
+              -H "X-NuGet-Client-Version: 6.0.0" \
+              -F "package=@artifacts/$pkg.$VERSION.nupkg" \
+              https://www.nuget.org/api/v2/package | sed -n '1,20p'
+            echo ""
+          done
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: packages
           path: artifacts/*.*nupkg
