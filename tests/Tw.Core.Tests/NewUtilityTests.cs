@@ -248,4 +248,79 @@ public class NewUtilityTests
         Assert.Single(diags);
         Assert.Contains("inset", diags[0].Message);
     }
+
+    // ---------------------------------------------------------------- font-family
+
+    [Theory]
+    [InlineData("font-sans", TwFontFamily.Sans)]
+    [InlineData("font-serif", TwFontFamily.Serif)]
+    [InlineData("font-mono", TwFontFamily.Mono)]
+    public void Font_family(string cls, TwFontFamily expected) =>
+        Assert.Equal((byte)expected, (byte)Single(cls, TwPropertyId.FontFamily).Value.X);
+
+    [Fact]
+    public void Font_weight_still_works_alongside_family() =>
+        Assert.Equal(700f, Single("font-bold", TwPropertyId.FontWeight).Value.X);
+
+    // ---------------------------------------------------------------- text-shadow
+
+    [Theory]
+    [InlineData("text-shadow")]
+    [InlineData("text-shadow-sm")]
+    [InlineData("text-shadow-lg")]
+    [InlineData("text-shadow-none")]
+    public void Text_shadow_maps_to_shadow(string cls) =>
+        Assert.Equal(TwValueKind.Shadow, Single(cls, TwPropertyId.Shadow).Value.Kind);
+
+    [Fact]
+    public void Text_align_still_works() => // text-shadow must not shadow text-center
+        Assert.Equal((byte)TwTextAlign.Center, (byte)Single("text-center", TwPropertyId.TextAlign).Value.X);
+
+    // ---------------------------------------------------------------- grid alignment
+
+    [Theory]
+    [InlineData("justify-self-start", TwAlign.Start)]
+    [InlineData("justify-self-center", TwAlign.Center)]
+    [InlineData("justify-self-end", TwAlign.End)]
+    [InlineData("justify-self-stretch", TwAlign.Stretch)]
+    public void Justify_self(string cls, TwAlign expected) =>
+        Assert.Equal((byte)expected, (byte)Single(cls, TwPropertyId.AlignSelfX).Value.X);
+
+    [Fact]
+    public void Justify_self_auto_is_a_noop() => Assert.Empty(TwEngine.Validate("justify-self-auto"));
+
+    [Fact]
+    public void Place_self_sets_both_axes()
+    {
+        Assert.Equal((byte)TwAlign.Center, (byte)Single("place-self-center", TwPropertyId.AlignSelfX).Value.X);
+        Assert.Equal((byte)TwAlign.Center, (byte)Single("place-self-center", TwPropertyId.AlignSelfY).Value.X);
+    }
+
+    [Fact]
+    public void Place_content_sets_align_and_justify()
+    {
+        Assert.Equal((byte)TwAlignContent.Center, (byte)Single("place-content-center", TwPropertyId.AlignContent).Value.X);
+        Assert.Equal((byte)TwJustify.Center, (byte)Single("place-content-center", TwPropertyId.JustifyContent).Value.X);
+    }
+
+    [Fact]
+    public void Place_content_stretch_is_align_content_only()
+    {
+        var plan = Engine.GetPlan("place-content-stretch");
+        Assert.Equal((byte)TwAlignContent.Stretch, (byte)Single("place-content-stretch", TwPropertyId.AlignContent).Value.X);
+        Assert.DoesNotContain(plan.Light, d => d.Property == TwPropertyId.JustifyContent);
+    }
+
+    // ---------------------------------------------------------------- reclassified as N/A
+
+    [Theory]
+    [InlineData("justify-items-center", "child-alignment")]
+    [InlineData("place-items-center", "child-alignment")]
+    [InlineData("indent-4", "text-indent")]
+    public void Non_mappable_alignment_gets_helpful_message(string cls, string fragment)
+    {
+        var diags = TwEngine.Validate(cls);
+        Assert.Single(diags);
+        Assert.Contains(fragment, diags[0].Message);
+    }
 }

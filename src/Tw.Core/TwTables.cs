@@ -79,6 +79,20 @@ public static class TwTables
             ["none"] = TwValue.Shadow(0x00000000, 0, 0, 0),
         };
 
+    /// <summary>
+    /// text-shadow-* name → shadow layer. Native has one Shadow per element, so a text
+    /// shadow renders as the element's shadow (ideal on transparent-background labels).
+    /// Empty key is bare <c>text-shadow</c>.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, TwValue> TextShadows =
+        new Dictionary<string, TwValue>(StringComparer.Ordinal)
+        {
+            ["sm"] = TwValue.Shadow(0x26000000, 0, 1, 1),   // ~15% black
+            [""] = TwValue.Shadow(0x40000000, 0, 1, 2),     // ~25%
+            ["lg"] = TwValue.Shadow(0x59000000, 0, 2, 4),   // ~35%
+            ["none"] = TwValue.Shadow(0x00000000, 0, 0, 0),
+        };
+
     /// <summary>tracking-* name → letter spacing in em.</summary>
     public static readonly IReadOnlyDictionary<string, float> Tracking =
         new Dictionary<string, float>(StringComparer.Ordinal)

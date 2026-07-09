@@ -279,6 +279,10 @@ internal sealed class TwMauiPlan
                 Add(type, TwProps.FontSize, Boxed.Double(hasLight ? lv.X : 14), Boxed.Double(hasDark ? dv.X : 14));
                 break;
 
+            case TwPropertyId.FontFamily:
+                Add(type, TwProps.FontFamily, FontFamilyOf(hasLight, lv), FontFamilyOf(hasDark, dv));
+                break;
+
             case TwPropertyId.LineHeight:
                 Add(type, TwProps.LineHeight, LineHeightOf(hasLight, lv, lightSet), LineHeightOf(hasDark, dv, darkSet));
                 break;
@@ -625,8 +629,31 @@ internal sealed class TwMauiPlan
     {
         TwAlign.Start => LayoutOptions.Start,
         TwAlign.End => LayoutOptions.End,
+        TwAlign.Stretch => LayoutOptions.Fill,
         _ => LayoutOptions.Center,
     };
+
+    /// <summary>Generic font stack → a concrete family for the running platform. Only
+    /// evaluated when a font-family utility is present (keeps DeviceInfo off the hot path).</summary>
+    private static object? FontFamilyOf(bool has, TwValue v)
+    {
+        if (!has) return null;
+        return (TwFontFamily)(byte)v.X switch
+        {
+            TwFontFamily.Serif => DeviceInfo.Platform == DevicePlatform.Android ? "serif" : "Georgia",
+            TwFontFamily.Mono => MonoFamily(),
+            _ => null, // Sans → the platform's default UI font
+        };
+
+        static string MonoFamily()
+        {
+            var p = DeviceInfo.Platform;
+            if (p == DevicePlatform.Android) return "monospace";
+            if (p == DevicePlatform.WinUI) return "Consolas";
+            if (p == DevicePlatform.iOS || p == DevicePlatform.MacCatalyst) return "Menlo";
+            return "Courier New";
+        }
+    }
 
     private static object? FloatOf(bool has, TwValue v, float fallback) => has ? v.X : fallback;
 
@@ -870,6 +897,19 @@ internal static class TwProps
         (typeof(DatePicker), DatePicker.FontAttributesProperty),
         (typeof(TimePicker), TimePicker.FontAttributesProperty),
         (typeof(RadioButton), RadioButton.FontAttributesProperty),
+    ];
+
+    public static readonly (Type, BindableProperty)[] FontFamily =
+    [
+        (typeof(Label), Label.FontFamilyProperty),
+        (typeof(Button), Button.FontFamilyProperty),
+        (typeof(Entry), Entry.FontFamilyProperty),
+        (typeof(Editor), Editor.FontFamilyProperty),
+        (typeof(SearchBar), SearchBar.FontFamilyProperty),
+        (typeof(Picker), Picker.FontFamilyProperty),
+        (typeof(DatePicker), DatePicker.FontFamilyProperty),
+        (typeof(TimePicker), TimePicker.FontFamilyProperty),
+        (typeof(RadioButton), RadioButton.FontFamilyProperty),
     ];
 
     public static readonly (Type, BindableProperty)[] CharacterSpacing =

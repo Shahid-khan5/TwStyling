@@ -341,9 +341,19 @@ internal static class TwParser
                 output.Add(new(TwPropertyId.FontWeight, TwValue.Scalar(weight)));
                 return true;
             }
-            error = arg is "sans" or "serif" or "mono"
-                ? "font families are not supported in v0 — set FontFamily directly"
-                : $"unknown font weight '{arg.ToString()}'";
+            TwFontFamily? family = arg switch
+            {
+                "sans" => TwFontFamily.Sans,
+                "serif" => TwFontFamily.Serif,
+                "mono" => TwFontFamily.Mono,
+                _ => null,
+            };
+            if (family is { } f)
+            {
+                output.Add(new(TwPropertyId.FontFamily, TwValue.Enum((byte)f)));
+                return true;
+            }
+            error = $"unknown font weight '{arg.ToString()}'";
             return false;
         }
 
@@ -630,6 +640,72 @@ internal static class TwParser
             return true;
         }
 
+        if (TryPrefix(u, "justify-items-", out arg))
+        {
+            error = "container default child-alignment has no native equivalent — use items-*/self-*/place-self-* on the children";
+            return false;
+        }
+
+        if (TryPrefix(u, "justify-self-", out arg))
+        {
+            if (arg is "auto") return true; // default alignment — nothing to set
+            if (SelfAlignOf(arg) is { } a)
+            {
+                output.Add(new(TwPropertyId.AlignSelfX, TwValue.Enum((byte)a)));
+                return true;
+            }
+            error = $"unknown justify-self '{arg.ToString()}'";
+            return false;
+        }
+
+        if (TryPrefix(u, "place-self-", out arg))
+        {
+            if (arg is "auto") return true;
+            if (SelfAlignOf(arg) is { } a)
+            {
+                output.Add(new(TwPropertyId.AlignSelfX, TwValue.Enum((byte)a)));
+                output.Add(new(TwPropertyId.AlignSelfY, TwValue.Enum((byte)a)));
+                return true;
+            }
+            error = $"unknown place-self '{arg.ToString()}'";
+            return false;
+        }
+
+        if (TryPrefix(u, "place-content-", out arg))
+        {
+            TwAlignContent? content = arg switch
+            {
+                "start" or "normal" => TwAlignContent.Start,
+                "center" => TwAlignContent.Center,
+                "end" => TwAlignContent.End,
+                "between" => TwAlignContent.Between,
+                "around" => TwAlignContent.Around,
+                "evenly" => TwAlignContent.Evenly,
+                "stretch" => TwAlignContent.Stretch,
+                _ => null,
+            };
+            if (content is { } c)
+            {
+                output.Add(new(TwPropertyId.AlignContent, TwValue.Enum((byte)c)));
+                // JustifyContent has no 'stretch'; place-content-stretch is align-content only.
+                TwJustify? justify = arg switch
+                {
+                    "start" or "normal" => TwJustify.Start,
+                    "center" => TwJustify.Center,
+                    "end" => TwJustify.End,
+                    "between" => TwJustify.Between,
+                    "around" => TwJustify.Around,
+                    "evenly" => TwJustify.Evenly,
+                    _ => null,
+                };
+                if (justify is { } j)
+                    output.Add(new(TwPropertyId.JustifyContent, TwValue.Enum((byte)j)));
+                return true;
+            }
+            error = $"unknown place-content '{arg.ToString()}'";
+            return false;
+        }
+
         if (TryPrefix(u, "justify-", out arg))
         {
             TwJustify? justify = arg switch
@@ -823,6 +899,19 @@ internal static class TwParser
 
     private static bool ResolveText(ReadOnlySpan<char> arg, List<TwDeclaration> output, ref string? error)
     {
+        // text-shadow / text-shadow-{sm,lg,none} → the element's Shadow (see TwTables.TextShadows).
+        if (arg is "shadow" || arg.StartsWith("shadow-", StringComparison.Ordinal))
+        {
+            var shadowSize = arg is "shadow" ? "" : arg[7..].ToString();
+            if (TwTables.TextShadows.TryGetValue(shadowSize, out var textShadow))
+            {
+                output.Add(new(TwPropertyId.Shadow, textShadow));
+                return true;
+            }
+            error = $"unknown text shadow '{arg.ToString()}'";
+            return false;
+        }
+
         switch (arg)
         {
             case "left" or "start":
@@ -1022,6 +1111,15 @@ internal static class TwParser
         error = $"expected a 1-based track index, got '{arg.ToString()}'";
         return false;
     }
+
+    private static TwAlign? SelfAlignOf(ReadOnlySpan<char> a) => a switch
+    {
+        "start" => TwAlign.Start,
+        "center" => TwAlign.Center,
+        "end" => TwAlign.End,
+        "stretch" => TwAlign.Stretch,
+        _ => null,
+    };
 
     /// <summary>Plain number or arbitrary "[N]" with an optional unit suffix (deg, %).</summary>
     private static bool TryNumber(ReadOnlySpan<char> arg, string suffix, out float value)
@@ -1234,6 +1332,10 @@ internal static class TwParser
             return "CSS filters (blur/brightness/backdrop-*/…) have no native equivalent";
         if (u.StartsWith("accent-", StringComparison.Ordinal) || u.StartsWith("caret-", StringComparison.Ordinal))
             return "form accent/caret colors are not modeled — set the control's own color properties";
+        if (u.StartsWith("place-items-", StringComparison.Ordinal))
+            return "container default child-alignment has no native equivalent — use items-*/self-*/place-self-* on the children";
+        if (u.StartsWith("indent-", StringComparison.Ordinal))
+            return "'text-indent' (indent-*) has no native equivalent";
         if (u.StartsWith("animate-", StringComparison.Ordinal))
             return "unknown animation — supported: animate-spin, animate-pulse, animate-bounce, animate-none";
         if (u is "absolute" or "relative" or "fixed" or "sticky"

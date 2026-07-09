@@ -110,6 +110,17 @@ public enum TwPropertyId : byte
     LineBreak,
     /// <summary>Color: shadow tint (shadow-{color}). Folds into <see cref="Shadow"/>'s brush.</summary>
     ShadowColor,
+    /// <summary>Enum: <see cref="TwFontFamily"/> (font-sans / font-serif / font-mono).</summary>
+    FontFamily,
+}
+
+/// <summary>Generic font stacks (font-sans / font-serif / font-mono). The adapter picks a
+/// platform-appropriate concrete family.</summary>
+public enum TwFontFamily : byte
+{
+    Sans = 0,
+    Serif = 1,
+    Mono = 2,
 }
 
 /// <summary>object-fit values (object-*). Maps to the platform image scaling mode.</summary>
@@ -198,6 +209,7 @@ public enum TwAlign : byte
     Center = 0,
     Start = 1,
     End = 2,
+    Stretch = 3,
 }
 
 /// <summary>bg-gradient-to-* directions, clockwise from top.</summary>
