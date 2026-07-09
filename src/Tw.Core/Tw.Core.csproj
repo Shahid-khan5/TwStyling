@@ -10,9 +10,11 @@
     <IsAotCompatible Condition="'$(TargetFramework)' == 'net10.0'">true</IsAotCompatible>
 
     <IsPackable>true</IsPackable>
-    <PackageId>Tw.Core</PackageId>
-    <Title>Tw.Core — Tailwind utility styling engine</Title>
-    <Description>Framework-neutral engine behind Tw: a span-based parser for the Tailwind class vocabulary, token tables, resolver, and cached style plans. Zero UI dependencies. Use Tw.Maui for .NET MAUI.</Description>
+    <!-- PackageId, not AssemblyName: nuget.org reserves the short `Tw.` prefix, so the
+         package ships as TwMaui.Core while the assembly and namespace stay Tw.Core. -->
+    <PackageId>TwMaui.Core</PackageId>
+    <Title>TwMaui.Core — Tailwind utility styling engine</Title>
+    <Description>Framework-neutral engine behind Tw: a span-based parser for the Tailwind class vocabulary, token tables, resolver, and cached style plans. Zero UI dependencies. Use the TwMaui package for .NET MAUI. Namespace: Tw.Core.</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>

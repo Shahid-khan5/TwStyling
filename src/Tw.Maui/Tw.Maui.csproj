@@ -10,9 +10,11 @@
     <SingleProject>true</SingleProject>
 
     <IsPackable>true</IsPackable>
-    <PackageId>Tw.Maui</PackageId>
-    <Title>Tw.Maui — Tailwind utility styling for .NET MAUI</Title>
-    <Description>Style native MAUI controls with the Tailwind class vocabulary: tw:Tw.Class in XAML, .Tw("...") in C#. Includes a Roslyn analyzer that validates class strings at build time and a source generator that precompiles literal classes into cached style plans, so applying a class at runtime is a dictionary hit rather than a parse.</Description>
+    <!-- PackageId, not AssemblyName: nuget.org reserves the short `Tw.` prefix, so the
+         package ships as TwMaui while the assembly and namespace stay Tw.Maui. -->
+    <PackageId>TwMaui</PackageId>
+    <Title>TwMaui — Tailwind utility styling for .NET MAUI</Title>
+    <Description>Style native MAUI controls with the Tailwind class vocabulary: tw:Tw.Class in XAML, .Tw("...") in C#. Includes a Roslyn analyzer that validates class strings at build time and a source generator that precompiles literal classes into cached style plans, so applying a class at runtime is a dictionary hit rather than a parse. Namespace: Tw.Maui.</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
@@ -36,10 +38,11 @@
     <None Include="..\Tw.Generators\bin\$(Configuration)\netstandard2.0\Tw.Generators.dll"
           Pack="true" PackagePath="analyzers\dotnet\cs" Visible="false" />
 
-    <!-- NuGet auto-imports build\$(PackageId).props/.targets into consuming projects.
+    <!-- NuGet auto-imports build\$(PackageId).props/.targets into consuming projects, matched
+         by exact filename — these must stay named after PackageId (TwMaui), not the assembly.
          Update, not Include: the SDK's default None glob already picked these up. -->
-    <None Update="build\Tw.Maui.props" Pack="true" PackagePath="build\Tw.Maui.props" />
-    <None Update="build\Tw.Maui.targets" Pack="true" PackagePath="build\Tw.Maui.targets" />
+    <None Update="build\TwMaui.props" Pack="true" PackagePath="build\TwMaui.props" />
+    <None Update="build\TwMaui.targets" Pack="true" PackagePath="build\TwMaui.targets" />
   </ItemGroup>
 
 </Project>
