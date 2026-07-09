@@ -69,22 +69,22 @@ jobs:
         with:
           user: shahidkhandev
 
-      # TwCore first: TwMaui depends on it. Pushing the dependent package before its
-      # dependency is indexed leaves it briefly uninstallable.
+      # TwStyling first: TwStyling.Maui depends on it. Pushing the dependent package before
+      # its dependency is indexed leaves it briefly uninstallable.
       # Each .nupkg push carries its matching .snupkg symbol package automatically.
       #
       # No --skip-duplicate. It swallows HTTP 409 and reports success, which turned a
       # release that published nothing into a green run. A conflict here is a real
       # problem and must fail the workflow.
-      - name: Push TwCore
+      - name: Push TwStyling
         run: >
-          dotnet nuget push artifacts/TwCore.${{ env.VERSION }}.nupkg
+          dotnet nuget push artifacts/TwStyling.${{ env.VERSION }}.nupkg
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
 
-      - name: Push TwMaui
+      - name: Push TwStyling.Maui
         run: >
-          dotnet nuget push artifacts/TwMaui.${{ env.VERSION }}.nupkg
+          dotnet nuget push artifacts/TwStyling.Maui.${{ env.VERSION }}.nupkg
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
 
@@ -96,7 +96,7 @@ jobs:
         if: failure() && steps.login.outcome == 'success'
         shell: bash
         run: |
-          for pkg in TwCore TwMaui; do
+          for pkg in TwStyling TwStyling.Maui; do
             echo "===== PUT $pkg.$VERSION.nupkg ====="
             curl -sS -i -X PUT \
               -H "X-NuGet-ApiKey: ${{ steps.login.outputs.NUGET_API_KEY }}" \

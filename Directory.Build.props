@@ -4,8 +4,8 @@
     <!-- Opt in per-project; keeps tests, benchmarks and the Gallery sample out of the feed -->
     <IsPackable>false</IsPackable>
 
-    <!-- 0.1.0-preview.1 shipped the engine as TwMaui.Core; that ID is retired and unlisted.
-         Published versions are immutable, so the TwCore rename lands in preview.2. -->
+    <!-- 0.1.0-preview.1 shipped as TwMaui / TwMaui.Core; both IDs are retired and unlisted.
+         Published versions are immutable, so the rename lands in preview.2. -->
     <Version>0.1.0-preview.2</Version>
     <Authors>Shahid Khan</Authors>
     <Company>Shahid Khan</Company>
