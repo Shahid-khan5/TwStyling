@@ -37,14 +37,14 @@ Or in C#: `new Label().Tw("text-xl font-bold")`.
 dotnet add package TwMaui
 ```
 
-That's the whole install. The package brings in `TwMaui.Core`, registers the analyzer and the
+That's the whole install. The package brings in `TwCore`, registers the analyzer and the
 source generator, and feeds your `.xaml` files to the generator so `tw:Tw.Class` literals are
 precompiled. Set `<TwPrecompile>false</TwPrecompile>` to turn precompilation off and parse
 classes at runtime instead; the analyzer keeps validating either way.
 
-The package IDs are `TwMaui` and `TwMaui.Core`; the assemblies and namespaces are `Tw.Maui` and
+The package IDs are `TwMaui` and `TwCore`; the assemblies and namespaces are `Tw.Maui` and
 `Tw.Core`. They differ because nuget.org reserves the short `Tw.` prefix. Your `using` statements
-are unaffected.
+are unaffected. `TwCore` carries no MAUI dependency and is usable on its own.
 
 ```csharp
 // MauiProgram.cs — optional; the engine self-initializes, this picks diagnostics behavior
@@ -129,11 +129,11 @@ Covers C# literals today; XAML validation via build task is planned. At runtime 
 
 ## Releasing
 
-Two packages ship: `TwMaui.Core` (engine) and `TwMaui` (adapter, carrying the analyzer and generator
-as analyzer assets). The sample, tests, and benchmarks are not packable.
+Two packages ship: `TwCore` (framework-agnostic engine) and `TwMaui` (MAUI adapter, carrying the
+analyzer and generator as analyzer assets). The sample, tests, and benchmarks are not packable.
 
 Version lives in `Directory.Build.props`. To publish, push a `v`-prefixed tag — the Release workflow
-derives the version from it, packs, and pushes `TwMaui.Core` before `TwMaui`. You can also run it
+derives the version from it, packs, and pushes `TwCore` before `TwMaui`. You can also run it
 from the Actions tab with an explicit version.
 
 ```bash

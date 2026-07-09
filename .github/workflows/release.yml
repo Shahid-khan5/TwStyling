@@ -69,16 +69,16 @@ jobs:
         with:
           user: shahidkhandev
 
-      # TwMaui.Core first: TwMaui depends on it. Pushing the dependent package before its
+      # TwCore first: TwMaui depends on it. Pushing the dependent package before its
       # dependency is indexed leaves it briefly uninstallable.
       # Each .nupkg push carries its matching .snupkg symbol package automatically.
       #
       # No --skip-duplicate. It swallows HTTP 409 and reports success, which turned a
       # release that published nothing into a green run. A conflict here is a real
       # problem and must fail the workflow.
-      - name: Push TwMaui.Core
+      - name: Push TwCore
         run: >
-          dotnet nuget push artifacts/TwMaui.Core.${{ env.VERSION }}.nupkg
+          dotnet nuget push artifacts/TwCore.${{ env.VERSION }}.nupkg
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
 
@@ -96,7 +96,7 @@ jobs:
         if: failure() && steps.login.outcome == 'success'
         shell: bash
         run: |
-          for pkg in TwMaui.Core TwMaui; do
+          for pkg in TwCore TwMaui; do
             echo "===== PUT $pkg.$VERSION.nupkg ====="
             curl -sS -i -X PUT \
               -H "X-NuGet-ApiKey: ${{ steps.login.outputs.NUGET_API_KEY }}" \

@@ -14,7 +14,7 @@
          package ships as TwMaui while the assembly and namespace stay Tw.Maui. -->
     <PackageId>TwMaui</PackageId>
     <Title>TwMaui — Tailwind utility styling for .NET MAUI</Title>
-    <Description>Style native MAUI controls with the Tailwind class vocabulary: tw:Tw.Class in XAML, .Tw("...") in C#. Includes a Roslyn analyzer that validates class strings at build time and a source generator that precompiles literal classes into cached style plans, so applying a class at runtime is a dictionary hit rather than a parse. Namespace: Tw.Maui.</Description>
+    <Description>Style native MAUI controls with the Tailwind class vocabulary: tw:Tw.Class in XAML, .Tw("...") in C#. Includes a Roslyn analyzer that validates class strings at build time and a source generator that precompiles literal classes into cached style plans, so applying a class at runtime is a dictionary hit rather than a parse. Built on the framework-agnostic TwCore engine. Namespace: Tw.Maui.</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
