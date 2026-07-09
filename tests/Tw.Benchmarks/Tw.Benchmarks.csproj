@@ -13,6 +13,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Tw.Core\Tw.Core.csproj" />
+    <!-- For MAUI-level lowering benchmarks (TwMauiPlan.Get). Pulls Microsoft.Maui.Controls;
+         only pure-managed type/property access is used, so it runs headless. -->
+    <ProjectReference Include="..\..\src\Tw.Maui\Tw.Maui.csproj" />
   </ItemGroup>
 
 </Project>

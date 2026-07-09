@@ -242,6 +242,10 @@ public static class TwRuntime
         {
             lock (Tracked)
             {
+                // Drop refs to collected elements so the list can't grow unbounded when
+                // breakpoint-styled elements churn without the window ever resizing.
+                Tracked.RemoveAll(wr => !wr.TryGetTarget(out _));
+
                 bool known = false;
                 foreach (var wr in Tracked)
                     if (wr.TryGetTarget(out var t) && ReferenceEquals(t, element))

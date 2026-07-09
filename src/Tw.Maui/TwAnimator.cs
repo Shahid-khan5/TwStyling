@@ -10,6 +10,10 @@ internal static class TwKeyframeRunner
     private static readonly BindableProperty KindProperty =
         BindableProperty.CreateAttached("TwKeyframeKind", typeof(TwKeyframes), typeof(TwKeyframeRunner), TwKeyframes.None);
 
+    /// <summary>True once Loaded/Unloaded lifecycle handlers are attached (wire once).</summary>
+    private static readonly BindableProperty LifecycleWiredProperty =
+        BindableProperty.CreateAttached("TwKeyframeLifecycle", typeof(bool), typeof(TwKeyframeRunner), false);
+
     /// <summary>
     /// Aborts a running loop and resets the property it was animating (a mid-cycle
     /// abort would otherwise leave Rotation/Opacity/TranslationY frozen at an
@@ -36,9 +40,14 @@ internal static class TwKeyframeRunner
 
     public static void Run(VisualElement element, TwKeyframes kind)
     {
-        element.AbortAnimation(Handle);
         element.SetValue(KindProperty, kind);
+        EnsureLifecycleWired(element);
+        Start(element, kind);
+    }
 
+    private static void Start(VisualElement element, TwKeyframes kind)
+    {
+        element.AbortAnimation(Handle);
         switch (kind)
         {
             case TwKeyframes.Spin:
@@ -60,6 +69,30 @@ internal static class TwKeyframeRunner
                 bounce.Commit(element, Handle, 16, 1000, repeat: () => true);
                 break;
         }
+    }
+
+    /// <summary>
+    /// A repeating animation's tick callback captures the element, so it would keep the
+    /// element alive (and the ticker busy) after it leaves the visual tree. Abort on
+    /// Unloaded to break that; resume on Loaded if the element is still meant to animate.
+    /// Handlers live on the element itself, so they don't extend its lifetime.
+    /// </summary>
+    private static void EnsureLifecycleWired(VisualElement element)
+    {
+        if ((bool)element.GetValue(LifecycleWiredProperty))
+            return;
+        element.SetValue(LifecycleWiredProperty, true);
+
+        element.Unloaded += (s, _) =>
+        {
+            if (s is VisualElement el)
+                el.AbortAnimation(Handle); // stop ticking; KindProperty remembers what to resume
+        };
+        element.Loaded += (s, _) =>
+        {
+            if (s is VisualElement el && (TwKeyframes)el.GetValue(KindProperty) is var k and not TwKeyframes.None)
+                Start(el, k);
+        };
     }
 }
 

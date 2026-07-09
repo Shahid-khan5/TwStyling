@@ -17,5 +17,7 @@
     <ShellContent Title="Layout" ContentTemplate="{DataTemplate pages:LayoutPage}" Route="Layout" />
     <ShellContent Title="VPN Demo" ContentTemplate="{DataTemplate pages:VpnDemoPage}" Route="VpnDemo" />
     <ShellContent Title="Web vs Native" ContentTemplate="{DataTemplate pages:ComparisonPage}" Route="Comparison" />
+    <ShellContent Title="Stress" ContentTemplate="{DataTemplate pages:StressPage}" Route="Stress" />
+    <ShellContent Title="Diagnostics" ContentTemplate="{DataTemplate pages:DiagnosticsPage}" Route="Diagnostics" />
 
 </Shell>

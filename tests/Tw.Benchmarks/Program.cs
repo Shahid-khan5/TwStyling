@@ -1,8 +1,11 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
+using Microsoft.Maui.Controls;
 using Tw.Core;
+using Tw.Maui;
 
 BenchmarkRunner.Run<PlanBenchmarks>();
+BenchmarkRunner.Run<MauiPlanBenchmarks>();
 
 /// <summary>
 /// The performance contract:
@@ -47,4 +50,31 @@ public class PlanBenchmarks
 
     [Benchmark]
     public TwDiagnostic[] ValidateTenUtilities() => TwEngine.Validate(TenUtilities);
+}
+
+/// <summary>
+/// The MAUI adapter's lowering step: neutral <see cref="StylePlan"/> → concrete
+/// (BindableProperty, boxed value) entries for a control type. Cached per (plan, type);
+/// every element after the first of its kind pays only this lookup, which must be a
+/// near-free, zero-allocation dictionary hit — the reconcile hot path depends on it.
+/// (Reconcile itself needs a live element + platform, so it's measured in-app on the
+/// Gallery's Stress page instead of here.)
+/// </summary>
+[MemoryDiagnoser]
+public class MauiPlanBenchmarks
+{
+    private static readonly TwEnvironment Env = new(TwPlatforms.Windows, TwIdioms.Desktop);
+    private StylePlan _plan = null!;
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        var engine = new TwEngine(Env);
+        _plan = engine.GetPlan(
+            "bg-white dark:bg-slate-800 rounded-2xl shadow-md p-6 mx-4 text-sm font-semibold pressed:bg-slate-100 opacity-90");
+        TwMauiPlan.Get(_plan, typeof(Label)); // warm the (plan, type) cache
+    }
+
+    [Benchmark]
+    public object LoweringCacheHit() => TwMauiPlan.Get(_plan, typeof(Label));
 }

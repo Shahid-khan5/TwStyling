@@ -4,60 +4,85 @@ namespace Tw.Maui;
 
 /// <summary>
 /// The single styling loop. Every dimension of change — class swap, breakpoint
-/// crossing, interactive state enter/exit, IsActive toggle — updates this element
-/// state vector and calls <see cref="Reconcile"/>:
+/// crossing, interactive state enter/exit, IsActive toggle — updates one per-element
+/// state object and calls <see cref="Reconcile"/>:
 ///
 ///   targets = base entries ⊕ breakpoint overlays (≤ window tier) ⊕ active state overlays
 ///   diff against what's currently applied → set changed, clear removed, done.
 ///
+/// The steady-state path (same properties, changed values) allocates nothing of ours:
+/// all mutable per-element data lives in one <see cref="State"/> object mutated in place
+/// (no boxed-int attached-property writes for the generation/state vector, no ToArray
+/// diff base), and the transient target/changed buffers are thread-static and reused.
+/// Remaining per-restyle allocation is MAUI's own SetValue machinery.
+///
 /// There is no "restore" anywhere: exit paths don't remember old values, they just
-/// recompute the full target set and diff. Theme is not part of the vector at all —
-/// every theme-differing entry is applied as an AppThemeBinding (SetAppTheme), so
-/// OS theme flips are handled by MAUI's own binding machinery per property.
-/// When the plan carries transition-*, the changed subset tweens instead of snapping
-/// (filtered by the spec's property kinds), then finalizes with a real apply so
-/// bindings are re-established.
+/// recompute the full target set and diff. Theme is not part of the vector — every
+/// theme-differing entry is applied as an AppThemeBinding (SetAppTheme), so OS theme
+/// flips are handled by MAUI's binding machinery per property. When the plan carries
+/// transition-*, the changed subset tweens instead of snapping (filtered by the spec's
+/// property kinds), then finalizes with a real apply so bindings are re-established.
 /// </summary>
 internal static class TwReconciler
 {
     private const string TweenHandle = "TwReconcile";
 
-    /// <summary>The lowered plan this element is currently styled by.</summary>
-    private static readonly BindableProperty PlanProperty =
-        BindableProperty.CreateAttached("TwReconcilerPlan", typeof(TwMauiPlan), typeof(TwReconciler), null);
+    /// <summary>All mutable per-element reconcile data, mutated in place.</summary>
+    private sealed class State
+    {
+        public TwMauiPlan? Plan;
+        /// <summary>The diff base — what is currently applied. Reused across reconciles.</summary>
+        public readonly List<TwMauiPlan.Entry> Applied = new(8);
+        /// <summary>Active interactive-state bitmask (TwInteractionWiring.*Bit).</summary>
+        public int States;
+        /// <summary>Bumped every reconcile; a delayed tween whose generation is stale
+        /// (the vector changed during its delay) must not commit old targets.</summary>
+        public int Generation;
+        public bool HasApplied;
+    }
 
-    /// <summary>What is currently applied — the diff base. Entry values are shared with the cached plan.</summary>
-    private static readonly BindableProperty AppliedProperty =
-        BindableProperty.CreateAttached("TwReconcilerApplied", typeof(TwMauiPlan.Entry[]), typeof(TwReconciler), null);
+    private static readonly BindableProperty StateProperty =
+        BindableProperty.CreateAttached("TwReconcilerState", typeof(State), typeof(TwReconciler), null);
 
-    /// <summary>Bitmask of active interactive states (bits = TwInteractionWiring.*Bit).</summary>
-    private static readonly BindableProperty StatesProperty =
-        BindableProperty.CreateAttached("TwReconcilerStates", typeof(int), typeof(TwReconciler), 0);
+    // Transient scratch, reused across reconciles. Reconcile runs on the UI thread and
+    // never re-enters itself (no property it sets re-triggers a reconcile), and these are
+    // read only synchronously, so a single shared buffer per thread is safe and alloc-free.
+    [ThreadStatic] private static List<TwMauiPlan.Entry>? _targets;
+    [ThreadStatic] private static List<TwMauiPlan.Entry>? _changed;
 
-    /// <summary>Bumped on every reconcile; a delay-* scheduled tween whose generation
-    /// is stale (the vector changed during the delay) must not commit old targets.</summary>
-    private static readonly BindableProperty GenerationProperty =
-        BindableProperty.CreateAttached("TwReconcilerGeneration", typeof(int), typeof(TwReconciler), 0);
+    private static State GetOrCreate(VisualElement element)
+    {
+        if (element.GetValue(StateProperty) is State existing)
+            return existing;
+        var created = new State();
+        element.SetValue(StateProperty, created);
+        return created;
+    }
 
-    public static bool HasApplied(VisualElement element) => element.GetValue(AppliedProperty) is not null;
+    public static bool HasApplied(VisualElement element) =>
+        element.GetValue(StateProperty) is State { HasApplied: true };
 
     public static void SetPlan(VisualElement element, TwMauiPlan plan, bool allowTween)
     {
-        element.SetValue(PlanProperty, plan);
+        GetOrCreate(element).Plan = plan;
         Reconcile(element, allowTween);
     }
 
     public static void SetState(VisualElement element, int bit, bool active)
     {
-        int states = (int)element.GetValue(StatesProperty);
-        int updated = active ? states | bit : states & ~bit;
-        if (updated == states)
+        var state = GetOrCreate(element);
+        int updated = active ? state.States | bit : state.States & ~bit;
+        if (updated == state.States)
             return;
-        element.SetValue(StatesProperty, updated);
+        state.States = updated;
         Reconcile(element, allowTween: true);
     }
 
-    public static void ClearStates(VisualElement element) => element.SetValue(StatesProperty, 0);
+    public static void ClearStates(VisualElement element)
+    {
+        if (element.GetValue(StateProperty) is State state)
+            state.States = 0;
+    }
 
     /// <summary>Window crossed a breakpoint tier (or the element just got a window).</summary>
     public static void EnvironmentChanged(VisualElement element) => Reconcile(element, allowTween: true);
@@ -65,9 +90,8 @@ internal static class TwReconciler
     // ---------------------------------------------------------------- targets
 
     /// <summary>base ⊕ breakpoints(≤width) ⊕ active states — later layers override per property.</summary>
-    private static List<TwMauiPlan.Entry> ComputeTargets(VisualElement element, TwMauiPlan plan)
+    private static void ComputeTargets(VisualElement element, TwMauiPlan plan, int states, List<TwMauiPlan.Entry> targets)
     {
-        var targets = new List<TwMauiPlan.Entry>(plan.Setters.Length + 4);
         foreach (var entry in plan.Setters)
             Overlay(targets, entry);
 
@@ -85,7 +109,6 @@ internal static class TwReconciler
             }
         }
 
-        int states = (int)element.GetValue(StatesProperty);
         if (states != 0 && plan.States.Length > 0)
         {
             foreach (var state in plan.States)
@@ -93,15 +116,13 @@ internal static class TwReconciler
                     foreach (var entry in state.Entries)
                         Overlay(targets, entry);
         }
-
-        return targets;
     }
 
     private static void Overlay(List<TwMauiPlan.Entry> targets, TwMauiPlan.Entry entry)
     {
         for (int i = 0; i < targets.Count; i++)
         {
-            if (targets[i].Property == entry.Property)
+            if (ReferenceEquals(targets[i].Property, entry.Property))
             {
                 targets[i] = entry;
                 return;
@@ -114,53 +135,67 @@ internal static class TwReconciler
 
     public static void Reconcile(VisualElement element, bool allowTween)
     {
-        if (element.GetValue(PlanProperty) is not TwMauiPlan plan)
+        if (element.GetValue(StateProperty) is not State state || state.Plan is not { } plan)
             return;
 
-        element.SetValue(GenerationProperty, (int)element.GetValue(GenerationProperty) + 1);
+        state.Generation++;
 
-        var targets = ComputeTargets(element, plan);
-        var applied = element.GetValue(AppliedProperty) as TwMauiPlan.Entry[] ?? [];
+        var targets = _targets ??= new List<TwMauiPlan.Entry>(16);
+        targets.Clear();
+        ComputeTargets(element, plan, state.States, targets);
 
-        // Removals: applied properties no target mentions go back to unset —
-        // ClearValue, so style/binding-provided values resurface.
-        foreach (var old in applied)
+        var applied = state.Applied;
+
+        // Removals: applied properties no target mentions go back to unset — ClearValue,
+        // so style/binding-provided values resurface.
+        for (int i = 0; i < applied.Count; i++)
         {
-            bool present = false;
-            foreach (var target in targets)
-                if (target.Property == old.Property) { present = true; break; }
-            if (!present)
+            var old = applied[i];
+            if (IndexOfProperty(targets, old.Property) < 0)
                 element.ClearValue(old.Property);
         }
 
-        // Changes: anything new or with different values.
-        var changed = new List<TwMauiPlan.Entry>();
-        foreach (var target in targets)
+        if (allowTween && state.HasApplied && plan.Transition is { } spec)
         {
-            bool same = false;
-            foreach (var old in applied)
+            var changed = _changed ??= new List<TwMauiPlan.Entry>(16);
+            changed.Clear();
+            for (int i = 0; i < targets.Count; i++)
             {
-                if (old.Property == target.Property)
-                {
-                    same = Equals(old.Light, target.Light) && Equals(old.Dark, target.Dark);
-                    break;
-                }
+                var target = targets[i];
+                int j = IndexOfProperty(applied, target.Property);
+                if (j < 0 || !SameValue(applied[j], target))
+                    changed.Add(target);
             }
-            if (!same)
-                changed.Add(target);
+            if (changed.Count > 0)
+                TweenTo(element, changed, spec, state);
+        }
+        else
+        {
+            for (int i = 0; i < targets.Count; i++)
+            {
+                var target = targets[i];
+                int j = IndexOfProperty(applied, target.Property);
+                if (j < 0 || !SameValue(applied[j], target))
+                    ApplyEntry(element, target);
+            }
         }
 
-        element.SetValue(AppliedProperty, targets.ToArray());
-
-        if (changed.Count == 0)
-            return;
-
-        if (allowTween && plan.Transition is { } spec && applied.Length > 0)
-            TweenTo(element, changed, spec);
-        else
-            foreach (var entry in changed)
-                ApplyEntry(element, entry);
+        // Targets become the new diff base — copy into the persistent, reused buffer.
+        applied.Clear();
+        applied.AddRange(targets);
+        state.HasApplied = true;
     }
+
+    private static int IndexOfProperty(List<TwMauiPlan.Entry> list, BindableProperty property)
+    {
+        for (int i = 0; i < list.Count; i++)
+            if (ReferenceEquals(list[i].Property, property))
+                return i;
+        return -1;
+    }
+
+    private static bool SameValue(in TwMauiPlan.Entry a, in TwMauiPlan.Entry b) =>
+        Equals(a.Light, b.Light) && Equals(a.Dark, b.Dark);
 
     /// <summary>Theme-differing entries ride an AppThemeBinding; the rest are plain values.</summary>
     private static void ApplyEntry(VisualElement element, in TwMauiPlan.Entry entry)
@@ -173,7 +208,7 @@ internal static class TwReconciler
 
     // ---------------------------------------------------------------- tweening
 
-    private static void TweenTo(VisualElement element, List<TwMauiPlan.Entry> changed, TwTransitionSpec spec)
+    private static void TweenTo(VisualElement element, List<TwMauiPlan.Entry> changed, TwTransitionSpec spec, State state)
     {
         bool dark = Application.Current?.RequestedTheme == AppTheme.Dark;
         var animation = new Animation();
@@ -211,11 +246,11 @@ internal static class TwReconciler
         if (!any)
             return;
 
-        int generation = (int)element.GetValue(GenerationProperty);
+        int generation = state.Generation;
         void Commit()
         {
             // A newer reconcile ran during the delay-* window — these targets are stale.
-            if ((int)element.GetValue(GenerationProperty) != generation)
+            if (state.Generation != generation)
                 return;
             element.AbortAnimation(TweenHandle);
             animation.Commit(element, TweenHandle, 16, (uint)spec.DurationMs, TwColorMath.EasingOf(spec.Easing),
