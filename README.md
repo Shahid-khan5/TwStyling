@@ -1,4 +1,7 @@
-# Tw — Tailwind utility styling for native .NET UI
+# TwStyling — Tailwind utility styling for native .NET UI
+
+[![NuGet: TwStyling.Maui](https://img.shields.io/nuget/vpre/TwStyling.Maui?label=TwStyling.Maui)](https://www.nuget.org/packages/TwStyling.Maui)
+[![NuGet: TwStyling](https://img.shields.io/nuget/vpre/TwStyling?label=TwStyling)](https://www.nuget.org/packages/TwStyling)
 
 Style native controls with the Tailwind vocabulary AI models (and web developers) already know:
 
@@ -26,16 +29,21 @@ Or in C#: `new Label().Tw("text-xl font-bold")`.
 | `src/Tw.Core` | Framework-neutral engine: span-based parser, Tailwind token tables, resolver, cached `StylePlan`s. `net10.0` + `netstandard2.0`, zero UI references. |
 | `src/Tw.Maui` | MAUI adapter: `Tw.Class` attached property, per-control property mapping, VisualStateManager bridge, `dark:` via AppThemeBinding. |
 | `src/Tw.Analyzers` | Roslyn analyzer (TW0001): validates class-string literals in C# at build time using the same parser the runtime uses. |
-| `src/Tw.Generators` | Source generator (the `[GeneratedRegex]` evolution). Every literal `.Tw("...")` call in C# and every literal `tw:Tw.Class` / `Tw.ActiveClass` in XAML is parsed at build time into static `StylePlan` data, preloaded into the engine cache by a `[ModuleInitializer]`. At runtime, applying that class is a dictionary hit, not a parse. Invalid XAML classes become build **errors** (TWG001). Only genuinely dynamic strings — interpolation, bindings, and device-dependent `platform:`/`idiom:` variants — fall through to the runtime parser. C# and XAML share one preload path; there is no C#-only interceptor fast lane. Installing the `Tw.Maui` package wires this up automatically (set `<TwPrecompile>false</TwPrecompile>` to opt out). |
+| `src/Tw.Generators` | Source generator (the `[GeneratedRegex]` evolution). Every literal `.Tw("...")` call in C# and every literal `tw:Tw.Class` / `Tw.ActiveClass` in XAML is parsed at build time into static `StylePlan` data, preloaded into the engine cache by a `[ModuleInitializer]`. At runtime, applying that class is a dictionary hit, not a parse. Invalid XAML classes become build **errors** (TWG001). Only genuinely dynamic strings — interpolation, bindings, and device-dependent `platform:`/`idiom:` variants — fall through to the runtime parser. C# and XAML share one preload path; there is no C#-only interceptor fast lane. Installing the `TwStyling.Maui` package wires this up automatically (set `<TwPrecompile>false</TwPrecompile>` to opt out). |
 | `samples/Gallery` | Demo app (Windows TFM for fast iteration) — the acceptance test: AI-idiom components pasted in unedited. |
 | `tests/Tw.Core.Tests` | Engine unit tests. |
 | `tests/Tw.Benchmarks` | BenchmarkDotNet perf contract. |
 
-## Setup
+## Install
 
-```
-dotnet add package TwStyling.Maui
-```
+Two packages are published on [nuget.org](https://www.nuget.org/packages/TwStyling.Maui):
+
+| Package | Install | Use when |
+|---|---|---|
+| [`TwStyling.Maui`](https://www.nuget.org/packages/TwStyling.Maui) | `dotnet add package TwStyling.Maui --prerelease` | You're building a MAUI app — this is the one you want. |
+| [`TwStyling`](https://www.nuget.org/packages/TwStyling) | `dotnet add package TwStyling --prerelease` | You only want the framework-neutral engine (parser, token tables, `StylePlan` cache) with no MAUI dependency. |
+
+(`--prerelease` is needed while versions are `0.1.0-preview.*`.)
 
 That's the whole install. The package brings in `TwStyling`, registers the analyzer and the
 source generator, and feeds your `.xaml` files to the generator so `tw:Tw.Class` literals are
@@ -82,6 +90,21 @@ XAML namespace: `xmlns:tw="https://tw"` (or `clr-namespace:Tw.Maui;assembly=Tw.M
 | Responsive | `sm:` `md:` `lg:` `xl:` `2xl:` (window width 640/768/1024/1280/1536) | overlay entries + window-size tier tracking |
 
 Deliberate deviations from web Tailwind: `pressed:` is first-class (touch-first); `hover:` maps to PointerOver; auto margins become `LayoutOptions`. Not yet supported (loud diagnostic, never a silent no-op): `divide-*`/`space-*`/`ring-*`, `group-*`/`peer-*`, fractional widths, font families, breakpoints combined with interactive variants.
+
+## Agent skill — teach your AI assistant this engine
+
+[`twstyling-skills`](https://github.com/Shahid-khan5/twstyling-skills) ships a `tw-maui`
+[Agent Skill](https://github.com/vercel-labs/skills) that teaches AI coding agents (Claude Code,
+Cursor, Codex, …) the full engine surface: every supported utility and the MAUI property it lands
+on, the variant prefixes and their cost, the deliberate deviations from web Tailwind, replacements
+for unsupported classes, and how the compile/cache/reconcile pipeline works.
+
+```bash
+npx skills add shahid-khan5/twstyling-skills
+```
+
+With the skill installed, an agent writing your MAUI UI emits classes the engine actually
+supports and reaches for the documented replacement instead of leaving dead classes behind.
 
 ## Binding-driven styling
 
@@ -144,7 +167,7 @@ git push origin v0.1.0-preview.1
 
 No secrets required: publishing uses nuget.org [Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing),
 which exchanges a GitHub OIDC token for a one-hour API key. The policy on nuget.org must match this
-repo exactly — owner `Shahid-khan5`, repo `Tw.Maui`, workflow `release.yml`, environment blank. If
+repo exactly — owner `Shahid-khan5`, repo `TwStyling`, workflow `release.yml`, environment blank. If
 you ever add an `environment:` to the release job, set the same value on the policy or the exchange
 is rejected.
 

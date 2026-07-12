@@ -12,8 +12,8 @@
     <Copyright>Copyright (c) 2026 Shahid Khan</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <PackageProjectUrl>https://github.com/Shahid-khan5/Tw.Maui</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/Shahid-khan5/Tw.Maui</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Shahid-khan5/TwStyling</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Shahid-khan5/TwStyling</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
