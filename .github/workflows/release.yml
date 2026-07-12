@@ -22,7 +22,7 @@ jobs:
 
     # Publishing uses nuget.org Trusted Publishing (OIDC), not a stored API key.
     # The matching policy on nuget.org must name:
-    #   owner Shahid-khan5 / repo Tw.Maui / workflow release.yml / environment (blank)
+    #   owner Shahid-khan5 / repo TwStyling.Maui / workflow release.yml / environment (blank)
     # Do NOT add `environment:` to this job unless you also set it on the policy — the
     # OIDC claims have to match exactly or the token exchange is rejected.
     permissions:
@@ -48,18 +48,18 @@ jobs:
           fi
 
       - name: Restore workloads
-        run: dotnet workload restore src/Tw.Maui/Tw.Maui.csproj
+        run: dotnet workload restore src/TwStyling.Maui/TwStyling.Maui.csproj
 
       - name: Test
-        run: dotnet test tests/Tw.Core.Tests/Tw.Core.Tests.csproj -c Release
+        run: dotnet test tests/TwStyling.Tests/TwStyling.Tests.csproj -c Release
 
       # Only the two packable projects. The Gallery sample is deliberately not built
       # here: it is a WinExe needing the win-x64 runtime pack, and nothing about
       # shipping the packages depends on it.
       - name: Pack
         run: |
-          dotnet pack src/Tw.Core/Tw.Core.csproj -c Release -o artifacts -p:Version=${{ env.VERSION }}
-          dotnet pack src/Tw.Maui/Tw.Maui.csproj -c Release -o artifacts -p:Version=${{ env.VERSION }}
+          dotnet pack src/TwStyling/TwStyling.csproj -c Release -o artifacts -p:Version=${{ env.VERSION }}
+          dotnet pack src/TwStyling.Maui/TwStyling.Maui.csproj -c Release -o artifacts -p:Version=${{ env.VERSION }}
 
       # Runs last, right before the pushes: the key it returns expires after 1 hour.
       # `user` is the nuget.org profile name that owns the packages — not an email.

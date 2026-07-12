@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/Gallery/Gallery.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/TwStyling.Analyzers/TwStyling.Analyzers.csproj" />
+    <Project Path="src/TwStyling/TwStyling.csproj" />
+    <Project Path="src/TwStyling.Css/TwStyling.Css.csproj" />
+    <Project Path="src/TwStyling.Generators/TwStyling.Generators.csproj" />
+    <Project Path="src/TwStyling.Maui/TwStyling.Maui.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TwStyling.Benchmarks/TwStyling.Benchmarks.csproj" />
+    <Project Path="tests/TwStyling.Tests/TwStyling.Tests.csproj" />
+    <Project Path="tests/TwStyling.Css.Tests/TwStyling.Css.Tests.csproj" />
+  </Folder>
+</Solution>

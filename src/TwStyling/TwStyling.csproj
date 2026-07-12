@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0 so the Roslyn analyzer (which runs inside the compiler) can reference the same engine -->
+    <TargetFrameworks>net10.0;netstandard2.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>TwStyling</RootNamespace>
+    <IsAotCompatible Condition="'$(TargetFramework)' == 'net10.0'">true</IsAotCompatible>
+
+    <IsPackable>true</IsPackable>
+    <PackageId>TwStyling</PackageId>
+    <Title>TwStyling — Tailwind utility styling engine</Title>
+    <Description>Framework-neutral engine behind Tw: lowers the CSS that the Tailwind compiler emits into cached, immutable style plans a native UI toolkit can apply. Includes a CSS value evaluator (var, calc, oklch, color-mix) and a fallback class-name parser. Zero UI dependencies. Use the TwStyling.Maui package for .NET MAUI.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Memory" Version="4.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Compiled in, not referenced. The CSS parser/evaluator is an implementation detail of the
+      engine — its ~20 types are an internal AST, not API we want to support — so it ships inside
+      TwStyling rather than as a third package with a public surface to keep stable.
+    -->
+    <Compile Include="..\TwStyling.Css\*.cs" Exclude="..\TwStyling.Css\AssemblyInfo.cs" LinkBase="Css" />
+  </ItemGroup>
+
+</Project>

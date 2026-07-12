@@ -1,4 +1,4 @@
-using Tw.Maui;
+using TwStyling.Maui;
 using static Gallery.Pages.GalleryUi;
 
 namespace Gallery.Pages;
@@ -83,9 +83,9 @@ public class LayoutPage : ContentPage
         rows.Add(Caption("Tw.IsActive toggles Tw.ActiveClass (bind it to any view-model bool) — transition-all animates the change"));
         var bound = new Label { Text = "Different size and color when the bool flips" }
             .Tw("transition-all duration-300 ease-out text-sm text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-lg p-3");
-        Tw.Maui.Tw.SetActiveClass(bound, "text-xl text-white bg-indigo-600 font-bold p-5");
+        TwStyling.Maui.Tw.SetActiveClass(bound, "text-xl text-white bg-indigo-600 font-bold p-5");
         var boolSwitch = new Switch();
-        boolSwitch.Toggled += (_, e) => Tw.Maui.Tw.SetIsActive(bound, e.Value);
+        boolSwitch.Toggled += (_, e) => TwStyling.Maui.Tw.SetIsActive(bound, e.Value);
         rows.Add(Row("gap-4 items-center", boolSwitch, bound));
 
         Content = Page(this, rows.ToArray());

@@ -46,7 +46,7 @@ accessibility, real controls, native performance.
 Everything cold happens during `dotnet build`:
 
 ```
-tw.css ──(Tailwind CLI)──▶ CSS ──(Tw.Css)──▶ StylePlan ──(codegen)──▶ static data
+tw.css ──(Tailwind CLI)──▶ CSS ──(TwStyling.Css)──▶ StylePlan ──(codegen)──▶ static data
                                                                           │
                                        runtime: dictionary hit ◀──────────┘
                                                     │
@@ -143,7 +143,7 @@ web Tailwind.
 toggling is two dictionary lookups — and `transition-*` in the base classes makes the switch animate
 instead of snap.
 
-**Measured** (`tests/Tw.Benchmarks`, plus a 1000-cell `CollectionView` and a leak probe in the
+**Measured** (`tests/TwStyling.Benchmarks`, plus a 1000-cell `CollectionView` and a leak probe in the
 Gallery): plan cache hit **~53 ns / 0 B**. A full restyle of a live element is ~22 µs and **184 B** —
 the time is MAUI's `SetValue` floor, not ours. Leak probe: 0 survivors across 4 scenarios.
 
@@ -153,36 +153,52 @@ the time is MAUI's `SetValue` floor, not ours. Leak probe: 0 survivors across 4 
 
 | Project | What it is |
 |---|---|
-| `src/Tw.Css` | CSS component-value parser and evaluator: `var()`, `calc()` with unit algebra, CSS Color 4 (`oklch`, `color-mix`). No UI dependency. |
-| `src/Tw.Core` | Framework-neutral engine: CSS → `StylePlan` lowering, token tables, plan cache. `net10.0` + `netstandard2.0`. |
-| `src/Tw.Maui` | MAUI adapter: `Tw.Class`, per-control property mapping, state reconciler, theme swap. |
-| `src/Tw.Analyzers` | Roslyn analyzer (TW0001) — validates class strings in C#. |
-| `src/Tw.Generators` | Source generator — lowers the Tailwind CLI's CSS into preloaded plans at build time. |
+| `src/TwStyling` | The engine: CSS → `StylePlan` lowering, a CSS value evaluator (`var()`, `calc()`, `oklch`, `color-mix`), plan cache. Framework-neutral, `net10.0` + `netstandard2.0`. |
+| `src/TwStyling.Maui` | MAUI adapter: `Tw.Class`, per-control property mapping, state reconciler, theme swap. |
+| `src/TwStyling.Analyzers` | Roslyn analyzer (TW0001) — validates class strings in C#. |
+| `src/TwStyling.Generators` | Source generator — lowers the Tailwind CLI's CSS into preloaded plans at build time. |
+| `src/TwStyling.Css` | The CSS parser/evaluator sources, compiled into the engine. Not a package: it is an internal AST, not API. |
 | `samples/Gallery` | Demo, acceptance test, and the stress / leak / perf harness. |
 
-Packages: **`TwStyling.Maui`** (adapter) and **`TwStyling`** (engine, no MAUI dependency). The
-assemblies and namespaces are `Tw.Maui` / `Tw.Core`; the package IDs differ only because nuget.org
-reserves the short `Tw.` prefix.
+Two packages: **`TwStyling.Maui`** (adapter) and **`TwStyling`** (engine, no MAUI dependency).
+Assembly names, namespaces, and package IDs all match.
+
+---
+
+## Upgrading: colors move
+
+Tailwind v4 redefined the palette in oklch, so real Tailwind renders slightly different colors than
+the old built-in tables: `bg-blue-500` moves `#3B82F6` → `#2B7FFF`. That is correct — it is what
+Tailwind actually specifies — but it restyles an existing app.
+
+To adopt the pipeline without changing a single rendered color:
+
+```xml
+<TwPalette>v3</TwPalette>
+```
+
+Everything else (arbitrary values, `@theme`, variants) still works; only the palette is pinned. Drop
+the property when you are ready to take the v4 colors.
 
 ---
 
 ## Status
 
-**Preview — not production ready.** The architecture is settled and the engine is well covered (269
-tests, live-verified on WinUI), but the CSS pipeline is new. Before shipping, know:
+**Preview.** The architecture is settled, the engine is well covered (272 tests), and the pipeline is
+verified on a running app — including a live check that build-time and runtime class strings resolve
+to the same values. What to know before shipping:
 
-- **Two palettes.** Literal class strings compile through Tailwind v4; interpolated ones
-  (`$"bg-{family}-{shade}"`) still fall through to the legacy parser and its **v3** color tables. An
-  app can render both. Fix in progress.
-- **Colors shift.** Adopting real v4 changes rendered colors — `bg-blue-500` moves `#3B82F6` →
-  `#2B7FFF`. Correct, but visible.
-- **Heads exercised:** Windows and Android. iOS/macOS build but are unverified end to end.
-- Grid `col-end-*` / `row-end-*` are not lowered yet.
+- **Heads:** all four (Windows, Android, iOS, MacCatalyst) build in CI, and platform variants are
+  verified to compile per-head. Only Windows has been *run* — iOS and macOS need a Mac.
+- **Colors move** on upgrade unless you set `<TwPalette>v3</TwPalette>` (above).
+- Grid `col-end-*` / `row-end-*` are not lowered yet (`col-span-*` is).
+- The API is not frozen. `0.2.0-preview.1` renamed the assemblies to match the package IDs; expect
+  more churn before 1.0.
 
 ## Roadmap
 
-- **v1**: one palette everywhere (retire the legacy parser), then a WPF adapter — which doubles as
-  the audit of whether the adapter abstraction is real.
+- **v1**: retire the built-in class-name parser entirely, then a WPF adapter — which doubles as the
+  audit of whether the adapter abstraction is real.
 - **Later**: a component library on the engine; docs and the Claude skill generated from the same
   tables.
 

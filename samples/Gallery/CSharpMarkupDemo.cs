@@ -1,9 +1,9 @@
-using Tw.Maui;
+using TwStyling.Maui;
 
 namespace Gallery;
 
 /// <summary>
-/// The fluent C# markup path. The Tw.Analyzers project validates these literals
+/// The fluent C# markup path. The TwStyling.Analyzers project validates these literals
 /// at build time — try changing a class to "bg-nope-500" and rebuild.
 /// </summary>
 public static class CSharpMarkupDemo

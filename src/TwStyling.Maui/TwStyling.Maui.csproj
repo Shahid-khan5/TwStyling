@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <UseMaui>true</UseMaui>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>TwStyling.Maui</RootNamespace>
+    <SingleProject>true</SingleProject>
+
+    <IsPackable>true</IsPackable>
+    <PackageId>TwStyling.Maui</PackageId>
+    <Title>TwStyling.Maui — Tailwind utility styling for .NET MAUI</Title>
+    <Description>Style native MAUI controls with the Tailwind class vocabulary: tw:Tw.Class in XAML, .Tw("...") in C#. Includes a Roslyn analyzer that validates class strings at build time and a source generator that precompiles literal classes into cached style plans, so applying a class at runtime is a dictionary hit rather than a parse. Built on the framework-agnostic TwStyling engine. Namespace: TwStyling.Maui.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
+    <ProjectReference Include="..\TwStyling\TwStyling.csproj" />
+  </ItemGroup>
+
+  <!-- Build-order only: these ship as analyzer assets, not as referenced assemblies. -->
+  <ItemGroup>
+    <ProjectReference Include="..\TwStyling.Analyzers\TwStyling.Analyzers.csproj"
+                      PrivateAssets="all" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\TwStyling.Generators\TwStyling.Generators.csproj"
+                      PrivateAssets="all" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\TwStyling.Analyzers\bin\$(Configuration)\netstandard2.0\TwStyling.Analyzers.dll"
+          Pack="true" PackagePath="analyzers\dotnet\cs" Visible="false" />
+    <None Include="..\TwStyling.Generators\bin\$(Configuration)\netstandard2.0\TwStyling.Generators.dll"
+          Pack="true" PackagePath="analyzers\dotnet\cs" Visible="false" />
+
+    <!-- NuGet auto-imports build\$(PackageId).props/.targets into consuming projects, matched
+         by exact filename — these must stay named after PackageId (TwStyling.Maui), not the
+         assembly. Update, not Include: the SDK's default None glob already picked these up. -->
+    <None Update="build\TwStyling.Maui.props" Pack="true" PackagePath="build\TwStyling.Maui.props" />
+    <None Update="build\TwStyling.Maui.targets" Pack="true" PackagePath="build\TwStyling.Maui.targets" />
+    <!-- Not packed here — see TwPackPaletteV3 below. -->
+  </ItemGroup>
+
+  <!--
+    build\palette-v3.css pins the colour palette to Tailwind's pre-v4 hexes (<TwPalette>v3</TwPalette>).
+
+    It cannot be packed with a plain <None Pack="true"> item: the MAUI SDK globs **/*.css into
+    MauiCss and *removes* the matched files from None, and because the SDK's targets are imported
+    after this project's body, that removal wins over anything declared here. Contributing the file
+    at pack time bypasses the item-glob ordering entirely.
+  -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);TwPackPaletteV3</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <Target Name="TwPackPaletteV3">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(MSBuildThisFileDirectory)build\palette-v3.css"
+                              PackagePath="build\palette-v3.css" />
+    </ItemGroup>
+  </Target>
+
+</Project>

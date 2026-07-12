@@ -2,7 +2,12 @@
 
 	<PropertyGroup>
 		<!-- Windows-only for fast iteration; add android/ios/maccatalyst back when testing those targets -->
-		<TargetFrameworks>net10.0-windows10.0.19041.0</TargetFrameworks>
+		<!-- Windows is the fast iteration loop. The other heads are here so the per-platform build
+		     (plan compilation, platform: variant filtering, the Tailwind CSS pipeline) is exercised
+		     for every target, not just the one that happens to run on this machine.
+		     Override with -p:TwHeads=windows to build only Windows. -->
+		<TargetFrameworks Condition="'$(TwHeads)' == 'windows'">net10.0-windows10.0.19041.0</TargetFrameworks>
+		<TargetFrameworks Condition="'$(TwHeads)' != 'windows'">net10.0-windows10.0.19041.0;net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
 
 		<!-- Note for MacCatalyst:
 		The default runtime is maccatalyst-x64, except in Release config, in which case the default is maccatalyst-x64;maccatalyst-arm64.
@@ -76,12 +81,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\src\Tw.Maui\Tw.Maui.csproj" />
+		<ProjectReference Include="..\..\src\TwStyling.Maui\TwStyling.Maui.csproj" />
 		<!-- Build-time validation of class strings in C# code -->
-		<ProjectReference Include="..\..\src\Tw.Analyzers\Tw.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+		<ProjectReference Include="..\..\src\TwStyling.Analyzers\TwStyling.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 		<!-- Build-time compilation: preloaded plans for C# and XAML literals.
-		     Package consumers get this automatically from build\Tw.Maui.targets. -->
-		<ProjectReference Include="..\..\src\Tw.Generators\Tw.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+		     Package consumers get this automatically from build\TwStyling.Maui.targets. -->
+		<ProjectReference Include="..\..\src\TwStyling.Generators\TwStyling.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 		<!-- XAML goes to the compiler so the generator can precompile tw:Tw.Class strings -->
 		<AdditionalFiles Include="**\*.xaml" />
 	</ItemGroup>
@@ -89,7 +94,7 @@
 	<!-- A ProjectReference does not import a package's build/ files, so do it by hand. BOTH are
 	     required: the .props supplies the defaults (notably TwPrecompile=true) that the .targets
 	     rely on — importing only the .targets makes TwRemoveGenerator strip the generator. -->
-	<Import Project="..\..\src\Tw.Maui\build\TwStyling.Maui.props" />
-	<Import Project="..\..\src\Tw.Maui\build\TwStyling.Maui.targets" />
+	<Import Project="..\..\src\TwStyling.Maui\build\TwStyling.Maui.props" />
+	<Import Project="..\..\src\TwStyling.Maui\build\TwStyling.Maui.targets" />
 
 </Project>

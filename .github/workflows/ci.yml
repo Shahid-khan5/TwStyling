@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    # Tw.Maui needs the MAUI workload; the Gallery sample targets net10.0-windows.
+    # TwStyling.Maui needs the MAUI workload; the Gallery sample targets net10.0-windows.
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,26 +17,52 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore workloads
-        run: dotnet workload restore Tw.slnx
+        run: dotnet workload restore TwStyling.slnx
 
       - name: Build library
-        run: dotnet build src/Tw.Maui/Tw.Maui.csproj -c Release
+        run: dotnet build src/TwStyling.Maui/TwStyling.Maui.csproj -c Release
 
       - name: Test
-        run: dotnet test tests/Tw.Core.Tests/Tw.Core.Tests.csproj -c Release
+        run: |
+          dotnet test tests/TwStyling.Tests/TwStyling.Tests.csproj -c Release
+          dotnet test tests/TwStyling.Css.Tests/TwStyling.Css.Tests.csproj -c Release
 
       - name: Pack (verifies packaging stays healthy)
         run: |
-          dotnet pack src/Tw.Core/Tw.Core.csproj -c Release -o artifacts
-          dotnet pack src/Tw.Maui/Tw.Maui.csproj -c Release -o artifacts
+          dotnet pack src/TwStyling.Css/TwStyling.Css.csproj -c Release -o artifacts
+          dotnet pack src/TwStyling/TwStyling.csproj -c Release -o artifacts
+          dotnet pack src/TwStyling.Maui/TwStyling.Maui.csproj -c Release -o artifacts
 
       # Separate, and last: the sample is a WinExe, so it needs the win-x64 runtime
       # pack that a plain restore won't fetch. Keep it out of the packaging steps —
       # a broken sample must never be able to block a release.
-      - name: Build sample
-        run: dotnet build samples/Gallery/Gallery.csproj -c Release -r win-x64 --self-contained false
+      - name: Build sample (Windows head)
+        run: dotnet build samples/Gallery/Gallery.csproj -c Release -f net10.0-windows10.0.19041.0 -r win-x64 --self-contained false -p:TwHeads=windows
 
       - uses: actions/upload-artifact@v4
         with:
           name: packages
           path: artifacts/*.*nupkg
+
+  # Every platform head, not just the one that happens to run on the CI machine. This is what
+  # keeps "it compiles on Windows" from being mistaken for "it works cross-platform": the Tailwind
+  # CLI runs per head, and platform: variants are filtered per head, so each one is a distinct
+  # build of the styling pipeline. A regression here would otherwise only surface on a device.
+  heads:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tfm: [net10.0-android, net10.0-ios, net10.0-maccatalyst]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore workloads
+        run: dotnet workload restore samples/Gallery/Gallery.csproj
+
+      - name: Build ${{ matrix.tfm }}
+        run: dotnet build samples/Gallery/Gallery.csproj -c Release -f ${{ matrix.tfm }}

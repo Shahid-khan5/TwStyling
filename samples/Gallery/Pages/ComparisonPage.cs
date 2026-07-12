@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text;
-using Tw.Maui;
+using TwStyling.Maui;
 
 namespace Gallery.Pages;
 

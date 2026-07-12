@@ -1,5 +1,6 @@
 using System.Text;
-using Tw.Maui;
+using TwStyling;
+using TwStyling.Maui;
 using static Gallery.Pages.GalleryUi;
 
 namespace Gallery.Pages;
@@ -63,7 +64,59 @@ public sealed class DiagnosticsPage : ContentPage
             sb.AppendLine();
         }
         sb.AppendLine($"  heap={GC.GetTotalMemory(false) / 1024.0 / 1024.0:N1}MB  plans={TwRuntime.Engine.CachedPlanCount}");
+        sb.Append(OneVocabularyReport());
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Checks on the real device that a class string built at runtime carries the Tailwind v4
+    /// palette. Before the compiled stylesheet was embedded, literals resolved through Tailwind but
+    /// interpolated strings fell through to the built-in parser and its v3 tables, so one app
+    /// rendered two different <c>bg-blue-500</c>s.
+    ///
+    /// The strings below are assembled at runtime on purpose: the generator cannot precompile them,
+    /// so they exercise exactly the path that used to diverge.
+    /// </summary>
+    public static string OneVocabularyReport()
+    {
+        var engine = TwRuntime.Engine;
+        var sb = new StringBuilder();
+
+        sb.AppendLine($"  stylesheet={(engine.Stylesheet is null ? "ABSENT — parser fallback" : "embedded")}");
+
+        // (family, shade, expected v4 hex). The v3 value is noted where it differs, which is the
+        // value these very strings produced before the fix.
+        var expected = new (string Family, string Shade, uint V4, uint V3)[]
+        {
+            ("blue", "500", 0xFF2B7FFF, 0xFF3B82F6),
+            ("red", "500", 0xFFFB2C36, 0xFFEF4444),
+            ("indigo", "600", 0xFF4F39F6, 0xFF4F46E5),
+            ("emerald", "500", 0xFF00BC7D, 0xFF10B981),
+        };
+
+        bool ok = true;
+        foreach (var (family, shade, v4, v3) in expected)
+        {
+            var classes = $"bg-{family}-{shade}";   // built at runtime — never a literal
+            uint actual = Rgba(engine.GetPlan(classes));
+
+            string verdict = actual == v4 ? "v4 ok" : actual == v3 ? "v3 — STALE PALETTE" : "unexpected";
+            ok &= actual == v4;
+            sb.AppendLine($"  {classes,-18} #{actual:X8}  {verdict}");
+        }
+
+        sb.AppendLine(ok
+            ? "  ONE VOCABULARY: ok — runtime strings resolve through Tailwind"
+            : "  ONE VOCABULARY: FAILED — the app is rendering two palettes");
+        return sb.ToString();
+
+        static uint Rgba(StylePlan plan)
+        {
+            foreach (var d in plan.Light)
+                if (d.Property == TwPropertyId.Background)
+                    return d.Value.Rgba;
+            return 0;
+        }
     }
 
     private async Task RunLeakProbe()

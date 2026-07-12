@@ -23,3 +23,15 @@
 @source "./**/*.cs";
 @source not "./obj/**";
 @source not "./bin/**";
+
+/* Safelist.
+
+   Tailwind only emits a rule for a candidate it can SEE in the source. A class string built at
+   runtime — `$"bg-{family}-{shade}"` on the Colors page — never appears literally, so no rule is
+   generated and the class would resolve to nothing.
+
+   Listing them here generates the rules; the embedded stylesheet then resolves them at runtime,
+   through the same Tailwind vocabulary as every literal. Without this the app would carry two
+   palettes: v4 for literals, whatever the built-in parser's tables say for everything else. */
+@source inline("bg-{slate,gray,zinc,neutral,stone,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,{1,2,3,4,5,6,7,8,9}00,950}");
+@source inline("bg-indigo-600/{10,25,40,50,60,75,90,100}");
