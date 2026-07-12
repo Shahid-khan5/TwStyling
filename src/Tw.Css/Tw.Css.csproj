@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0 so the source generator (which runs inside the compiler) can evaluate CSS at build time -->
+    <TargetFrameworks>net10.0;netstandard2.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Tw.Css</RootNamespace>
+    <IsAotCompatible Condition="'$(TargetFramework)' == 'net10.0'">true</IsAotCompatible>
+
+    <IsPackable>true</IsPackable>
+    <PackageId>TwStyling.Css</PackageId>
+    <Title>TwStyling.Css — CSS value parser and evaluator</Title>
+    <Description>A CSS component-value parser and evaluator: var() resolution, calc() unit algebra, and the CSS Color 4 function set (oklch, oklab, color-mix). No UI dependencies. Namespace: Tw.Css.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Memory" Version="4.6.0" />
+    <!-- Index/Range are compiler-required for the `x[1..]` slicing this project uses. -->
+    <Compile Include="..\Tw.Core\IndexRangePolyfill.cs" Link="IndexRangePolyfill.cs" />
+  </ItemGroup>
+
+</Project>

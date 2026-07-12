@@ -25,4 +25,8 @@
     <PackageReference Include="System.Memory" Version="4.6.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Tw.Css\Tw.Css.csproj" />
+  </ItemGroup>
+
 </Project>

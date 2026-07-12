@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using Tw.Core;
+using Tw.Css;
 
 namespace Tw.Generators;
 
@@ -60,6 +61,24 @@ public sealed class TwSourceGenerator : IIncrementalGenerator
             .Select(static (file, ct) => (file.Path, Strings: ExtractXamlClassStrings(file.GetText(ct)?.ToString())))
             .Collect();
 
+        // The stylesheet the real Tailwind CLI produced for this project (see TwStyling.Maui.targets).
+        // When present it is the source of truth for what every utility means, so the built-in
+        // class-name parser is bypassed entirely. Absent, the parser handles everything as before.
+        //
+        // Matched against the TwGeneratedCss build property, never by filename: the MAUI SDK globs
+        // *.css as MauiCss and adds the project's *entry* stylesheet to AdditionalFiles by itself.
+        // That file holds only @import/@custom-variant and no rules, so picking it up by name would
+        // silently make every utility look unknown.
+        var tailwindCss = context.AdditionalTextsProvider
+            .Combine(context.AnalyzerConfigOptionsProvider)
+            .Where(static pair =>
+                pair.Right.GlobalOptions.TryGetValue("build_property.TwGeneratedCss", out var expected)
+                && !string.IsNullOrEmpty(expected)
+                && IsSameFile(pair.Left.Path, expected))
+            .Select(static (pair, ct) => pair.Left.GetText(ct)?.ToString())
+            .Where(static css => !string.IsNullOrEmpty(css))
+            .Collect();
+
         var hasTwMaui = context.CompilationProvider.Select(static (compilation, _) =>
             compilation.GetTypeByMetadataName("Tw.Maui.TwRuntime") is not null);
 
@@ -72,13 +91,31 @@ public sealed class TwSourceGenerator : IIncrementalGenerator
                 ? DetectPlatform(tfm)
                 : (TwPlatforms?)null);
 
-        context.RegisterSourceOutput(callStrings.Combine(xamlFiles).Combine(hasTwMaui).Combine(platform), static (spc, input) =>
-        {
-            var (((csharp, xaml), twMauiReferenced), targetPlatform) = input;
-            if (!twMauiReferenced)
-                return;
-            Execute(spc, csharp, xaml, targetPlatform);
-        });
+        context.RegisterSourceOutput(
+            callStrings.Combine(xamlFiles).Combine(hasTwMaui).Combine(platform).Combine(tailwindCss),
+            static (spc, input) =>
+            {
+                var ((((csharp, xaml), twMauiReferenced), targetPlatform), css) = input;
+                if (!twMauiReferenced)
+                    return;
+                Execute(spc, csharp, xaml, targetPlatform, css);
+            });
+    }
+
+    /// <summary>
+    /// Whether an AdditionalFile is the stylesheet named by $(TwGeneratedCss). The property is
+    /// project-relative while the AdditionalFile path is absolute, so compare on the tail rather
+    /// than resolving a working directory the generator does not have.
+    /// </summary>
+    private static bool IsSameFile(string additionalFilePath, string expected)
+    {
+        static string Normalize(string path) => path.Replace('\\', '/').TrimStart('.', '/');
+
+        var left = Normalize(additionalFilePath);
+        var right = Normalize(expected);
+
+        return left.EndsWith(right, StringComparison.OrdinalIgnoreCase)
+            || right.EndsWith(left, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -157,11 +194,30 @@ public sealed class TwSourceGenerator : IIncrementalGenerator
         SourceProductionContext spc,
         ImmutableArray<string?> csharpStrings,
         ImmutableArray<(string Path, ImmutableArray<(string Classes, int Line, int Column)> Strings)> xaml,
-        TwPlatforms? targetPlatform)
+        TwPlatforms? targetPlatform,
+        ImmutableArray<string?> tailwindCss)
     {
         // With the platform known, resolve platform: variants for it; leave Idioms open
         // (a phone and a tablet share one build head, so idiom: variants stay dynamic).
         var environment = new TwEnvironment(targetPlatform ?? TwPlatforms.Any, TwIdioms.Any);
+
+        // When the project compiled a Tailwind stylesheet, IT defines the utility vocabulary —
+        // arbitrary values, @theme tokens, @utility, @custom-variant. Fall back to the built-in
+        // class-name parser only when there is no stylesheet.
+        TwCssPlanCompiler? cssCompiler = null;
+        foreach (var css in tailwindCss)
+        {
+            if (string.IsNullOrEmpty(css)) continue;
+            try
+            {
+                cssCompiler = new TwCssPlanCompiler(CssStylesheetParser.Parse(css!));
+                break;
+            }
+            catch
+            {
+                // A malformed stylesheet must not take the build down: fall back to the parser.
+            }
+        }
 
         // Compile every unique literal whose plan is fully knowable at build time.
         var plans = new Dictionary<string, StylePlan>(StringComparer.Ordinal);
@@ -170,12 +226,25 @@ public sealed class TwSourceGenerator : IIncrementalGenerator
         {
             if (plans.ContainsKey(classes) || classes.Contains('{'))
                 return;
-            var (hasPlatform, hasIdiom) = ScanEnvVariants(classes);
-            // idiom: variants are always runtime-resolved; platform: variants only when
-            // we couldn't pin the target platform (a platform-neutral compilation).
-            if (hasIdiom || (hasPlatform && targetPlatform is null))
-                return;
-            var plan = StylePlanCompiler.Compile(classes, environment);
+
+            StylePlan plan;
+            if (cssCompiler is not null)
+            {
+                // The idiom is a device fact, not a build fact — leave those strings to the runtime.
+                if (cssCompiler.HasIdiomVariant(classes))
+                    return;
+                plan = cssCompiler.Compile(classes, environment);
+            }
+            else
+            {
+                var (hasPlatform, hasIdiom) = ScanEnvVariants(classes);
+                // idiom: variants are always runtime-resolved; platform: variants only when
+                // we couldn't pin the target platform (a platform-neutral compilation).
+                if (hasIdiom || (hasPlatform && targetPlatform is null))
+                    return;
+                plan = StylePlanCompiler.Compile(classes, environment);
+            }
+
             if (plan.Diagnostics.Length > 0)
             {
                 if (xamlPath is not null)

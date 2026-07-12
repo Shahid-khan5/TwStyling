@@ -5,11 +5,13 @@
   <Folder Name="/src/">
     <Project Path="src/Tw.Analyzers/Tw.Analyzers.csproj" />
     <Project Path="src/Tw.Core/Tw.Core.csproj" />
+    <Project Path="src/Tw.Css/Tw.Css.csproj" />
     <Project Path="src/Tw.Generators/Tw.Generators.csproj" />
     <Project Path="src/Tw.Maui/Tw.Maui.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Tw.Benchmarks/Tw.Benchmarks.csproj" />
     <Project Path="tests/Tw.Core.Tests/Tw.Core.Tests.csproj" />
+    <Project Path="tests/Tw.Css.Tests/Tw.Css.Tests.csproj" />
   </Folder>
 </Solution>

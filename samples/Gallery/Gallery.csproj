@@ -86,4 +86,10 @@
 		<AdditionalFiles Include="**\*.xaml" />
 	</ItemGroup>
 
+	<!-- A ProjectReference does not import a package's build/ files, so do it by hand. BOTH are
+	     required: the .props supplies the defaults (notably TwPrecompile=true) that the .targets
+	     rely on — importing only the .targets makes TwRemoveGenerator strip the generator. -->
+	<Import Project="..\..\src\Tw.Maui\build\TwStyling.Maui.props" />
+	<Import Project="..\..\src\Tw.Maui\build\TwStyling.Maui.targets" />
+
 </Project>

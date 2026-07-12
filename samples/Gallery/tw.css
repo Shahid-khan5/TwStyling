@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Native platform + idiom variants. Tailwind passes an unrecognized media type through
+   verbatim; the plan compiler resolves it at build time and filters per build head. */
+@custom-variant windows (@media windows);
+@custom-variant android (@media android);
+@custom-variant ios (@media ios);
+@custom-variant mac (@media mac);
+@custom-variant phone (@media phone);
+@custom-variant tablet (@media tablet);
+@custom-variant desktop (@media desktop);
+
+/* MAUI has no CSS :hover/:active on elements; these map to the engine's state vector. */
+@custom-variant pressed (&:active);
+
+/* Only scan sources that can carry class strings. */
+@source "./**/*.xaml";
+@source "./**/*.cs";
+@source not "./obj/**";
+@source not "./bin/**";

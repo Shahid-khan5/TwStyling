@@ -104,7 +104,15 @@ internal static class StylePlanCompiler
 
         var diagnostics = new List<TwDiagnostic>();
         var items = TwParser.Parse(classes, diagnostics.Add);
+        return FromItems(items, env, classes, diagnostics);
+    }
 
+    /// <summary>
+    /// Merges already-resolved items into a plan. Shared by the class-name parser and the
+    /// CSS pipeline so both front ends produce byte-identical plans from the same declarations.
+    /// </summary>
+    internal static StylePlan FromItems(List<ParsedItem> items, in TwEnvironment env, string classes, List<TwDiagnostic> diagnostics)
+    {
         // Static filtering: utilities for other platforms/idioms vanish here and
         // never exist at runtime — platform variants cost nothing per element.
         var environment = env;

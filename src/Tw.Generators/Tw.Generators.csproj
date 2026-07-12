@@ -18,6 +18,8 @@
     <!-- Same trick as Tw.Analyzers: the generator runs the real engine inside csc,
          so build-time compilation is by definition identical to runtime parsing -->
     <Compile Include="..\Tw.Core\**\*.cs" Exclude="..\Tw.Core\bin\**;..\Tw.Core\obj\**" LinkBase="Core" />
+    <!-- Tw.Core's CSS front end depends on these; the same self-contained rule applies. -->
+    <Compile Include="..\Tw.Css\**\*.cs" Exclude="..\Tw.Css\bin\**;..\Tw.Css\obj\**" LinkBase="Css" />
   </ItemGroup>
 
 </Project>

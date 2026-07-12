@@ -15,6 +15,8 @@
     <!-- Analyzers must be self-contained: compile the engine sources in directly
          (same single source of truth, no dependency dll for the compiler to load) -->
     <Compile Include="..\Tw.Core\**\*.cs" Exclude="..\Tw.Core\bin\**;..\Tw.Core\obj\**" LinkBase="Core" />
+    <!-- Tw.Core's CSS front end depends on these; the same self-contained rule applies. -->
+    <Compile Include="..\Tw.Css\**\*.cs" Exclude="..\Tw.Css\bin\**;..\Tw.Css\obj\**" LinkBase="Css" />
   </ItemGroup>
 
 </Project>
