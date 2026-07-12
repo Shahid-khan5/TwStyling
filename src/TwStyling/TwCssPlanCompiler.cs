@@ -119,7 +119,11 @@ public sealed class TwCssPlanCompiler
         {
             if (!_byClass.TryGetValue(candidate, out var rules))
             {
-                diagnostics.Add(new TwDiagnostic(classes, candidate, "unknown utility — no rule was generated for it"));
+                // Tailwind itself produced no rule for this candidate, so it is not a utility at all:
+                // a typo, a variant that was never declared, or something the standard scale rejects
+                // (`-p-2`). Say where it can be defined rather than just that it is unknown.
+                diagnostics.Add(new TwDiagnostic(classes, candidate,
+                    "unknown utility — Tailwind generated no rule for it. Check the spelling, or define it in tw.css with @theme, @utility or @custom-variant."));
                 continue;
             }
 

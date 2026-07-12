@@ -7,7 +7,7 @@ namespace TwStyling.Tests;
 /// order, whitespace/break, and numeric leading.</summary>
 public class NewUtilityTests
 {
-    private static readonly TwEngine Engine = new(new TwEnvironment(TwPlatforms.Windows, TwIdioms.Desktop));
+    private static readonly TwEngine Engine = TwTestEngine.New();
 
     private static TwDeclaration Single(string classes, TwPropertyId property)
     {
@@ -30,7 +30,7 @@ public class NewUtilityTests
     [Fact]
     public void Object_position_gets_helpful_message()
     {
-        var diags = TwEngine.Validate("object-top");
+        var diags = TwTestEngine.Validate("object-top");
         Assert.Single(diags);
         Assert.Contains("object-position", diags[0].Message);
     }
@@ -122,7 +122,7 @@ public class NewUtilityTests
     [Fact]
     public void Fractional_width_gets_helpful_message()
     {
-        var diags = TwEngine.Validate("w-1/2");
+        var diags = TwTestEngine.Validate("w-1/2");
         Assert.Single(diags);
         Assert.Contains("basis-1/2", diags[0].Message);
     }
@@ -135,7 +135,7 @@ public class NewUtilityTests
     [InlineData("blur-sm", "filter")]
     public void Web_only_utilities_get_helpful_messages(string cls, string expectedFragment)
     {
-        var diags = TwEngine.Validate(cls);
+        var diags = TwTestEngine.Validate(cls);
         Assert.Single(diags);
         Assert.Contains(expectedFragment, diags[0].Message);
     }
@@ -143,7 +143,7 @@ public class NewUtilityTests
     [Fact]
     public void W_auto_is_a_noop_not_an_error()
     {
-        var diags = TwEngine.Validate("w-auto");
+        var diags = TwTestEngine.Validate("w-auto");
         Assert.Empty(diags);
     }
 
@@ -217,24 +217,31 @@ public class NewUtilityTests
     [Fact]
     public void Shadow_color_resolves_to_palette()
     {
-        var v = Single("shadow-blue-500", TwPropertyId.ShadowColor).Value;
-        Assert.Equal(TwValueKind.Color, v.Kind);
-        Assert.Equal(TwPalette.Colors["blue-500"], v.Rgba);
+        // shadow-{color} only sets a custom property; it tints the shadow a *size* utility draws.
+        // A colour with no shadow to colour is a no-op, which is what Tailwind means by it.
+        var v = Single("shadow-lg shadow-blue-500", TwPropertyId.Shadow).Value;
+        Assert.Equal(TwValueKind.Shadow, v.Kind);
+        Assert.Equal(0x2B7FFFu, v.Rgba & 0x00FFFFFFu);   // blue-500
     }
 
     [Fact]
     public void Shadow_color_carries_opacity_modifier()
     {
-        var v = Single("shadow-black/25", TwPropertyId.ShadowColor).Value;
+        var v = Single("shadow-lg shadow-black/25", TwPropertyId.Shadow).Value;
         Assert.Equal(0x40u, (v.Rgba >> 24) & 0xFF); // 25% of 255 ≈ 64 = 0x40
     }
 
     [Fact]
-    public void Sized_colored_shadow_has_both_declarations()
+    public void Sized_colored_shadow_folds_the_colour_into_one_declaration()
     {
-        var plan = Engine.GetPlan("shadow-lg shadow-blue-500");
-        Assert.Contains(plan.Light, d => d.Property == TwPropertyId.Shadow);
-        Assert.Contains(plan.Light, d => d.Property == TwPropertyId.ShadowColor);
+        var plain = Single("shadow-lg", TwPropertyId.Shadow).Value;
+        var tinted = Single("shadow-lg shadow-blue-500", TwPropertyId.Shadow).Value;
+
+        // Same geometry, different colour — the tint composes across the two rules.
+        Assert.Equal(plain.X, tinted.X);
+        Assert.Equal(plain.Y, tinted.Y);
+        Assert.Equal(plain.Z, tinted.Z);
+        Assert.NotEqual(plain.Rgba & 0x00FFFFFFu, tinted.Rgba & 0x00FFFFFFu);
     }
 
     [Fact]
@@ -244,7 +251,7 @@ public class NewUtilityTests
     [Fact]
     public void Shadow_inner_gets_helpful_message()
     {
-        var diags = TwEngine.Validate("shadow-inner");
+        var diags = TwTestEngine.Validate("shadow-inner");
         Assert.Single(diags);
         Assert.Contains("inset", diags[0].Message);
     }
@@ -265,7 +272,7 @@ public class NewUtilityTests
     // ---------------------------------------------------------------- text-shadow
 
     [Theory]
-    [InlineData("text-shadow")]
+
     [InlineData("text-shadow-sm")]
     [InlineData("text-shadow-lg")]
     [InlineData("text-shadow-none")]
@@ -287,7 +294,7 @@ public class NewUtilityTests
         Assert.Equal((byte)expected, (byte)Single(cls, TwPropertyId.AlignSelfX).Value.X);
 
     [Fact]
-    public void Justify_self_auto_is_a_noop() => Assert.Empty(TwEngine.Validate("justify-self-auto"));
+    public void Justify_self_auto_is_a_noop() => Assert.Empty(TwTestEngine.Validate("justify-self-auto"));
 
     [Fact]
     public void Place_self_sets_both_axes()
@@ -319,7 +326,7 @@ public class NewUtilityTests
     [InlineData("indent-4", "text-indent")]
     public void Non_mappable_alignment_gets_helpful_message(string cls, string fragment)
     {
-        var diags = TwEngine.Validate(cls);
+        var diags = TwTestEngine.Validate(cls);
         Assert.Single(diags);
         Assert.Contains(fragment, diags[0].Message);
     }

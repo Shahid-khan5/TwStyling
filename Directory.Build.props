@@ -7,12 +7,13 @@
     <!--
       0.1.0-preview.1 shipped as TwMaui / TwMaui.Core; both IDs are retired and unlisted.
 
-      0.2.0-preview.1 is the CSS pipeline: Tailwind itself now compiles the class vocabulary, the
+      1.0.0-rc.1 is the CSS pipeline. Tailwind itself is now the only vocabulary: the class-name
+      parser and its copy of Tailwind's theme are deleted, so nothing can drift from Tailwind. The
       assemblies and namespaces were renamed to match the package IDs (Tw.Core → TwStyling,
-      Tw.Maui → TwStyling.Maui), and the CSS layer is internal rather than a third package. Both
-      are breaking, hence the minor bump rather than another preview of 0.1.0.
+      Tw.Maui → TwStyling.Maui). The API is what 1.0 will ship; rc rather than final because
+      iOS and Android are verified by build and by generated plans, but have not yet been RUN.
     -->
-    <Version>0.2.0-preview.1</Version>
+    <Version>1.0.0-rc.1</Version>
     <Authors>Shahid Khan</Authors>
     <Company>Shahid Khan</Company>
     <Copyright>Copyright (c) 2026 Shahid Khan</Copyright>

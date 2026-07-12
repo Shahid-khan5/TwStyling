@@ -4,9 +4,9 @@ using TwStyling.Css;
 namespace TwStyling.Tests;
 
 /// <summary>
-/// The CSS front end must produce the same <see cref="StylePlan"/> shape the class-name parser does,
-/// while additionally handling things the parser never could: arbitrary values, custom theme tokens,
-/// and user-declared variants.
+/// Tailwind is the engine's only vocabulary. These cover what that buys — arbitrary values, custom
+/// theme tokens, user-declared variants, gradients composed across rules — and the invariant that
+/// build-time and runtime resolution of the same class string agree.
 /// </summary>
 public class TwCssPlanCompilerTests
 {
@@ -52,7 +52,7 @@ public class TwCssPlanCompilerTests
         Assert.Equal(0xFB2C36u, background.Rgba & 0x00FFFFFF);
     }
 
-    // ------------------------------------- things TwParser could never do
+    // ------------------------------------------------ the Tailwind vocabulary
 
     [Fact]
     public void Arbitrary_Values_Just_Work()
@@ -268,25 +268,15 @@ public class TwCssPlanCompilerTests
     }
 
     /// <summary>
-    /// A project with no tw.css falls back to the built-in class-name parser — and that parser must
-    /// still speak the same Tailwind. Its palette tables are generated from Tailwind's own oklch
-    /// theme (tools/gen-palette.mjs), so both front ends agree on every colour.
+    /// With no stylesheet there is no vocabulary: the engine cannot invent one, and returns an empty
+    /// plan rather than guessing. The build always supplies a stylesheet (generating a default entry
+    /// when the project has no tw.css), so this is only reachable by opting out of the pipeline.
     /// </summary>
     [Fact]
-    public void The_Fallback_Parser_Carries_The_Same_Palette_As_The_Stylesheet()
+    public void Without_A_Stylesheet_There_Is_No_Vocabulary()
     {
-        var withStylesheet = new TwEngine(Windows) { Stylesheet = new TwCssPlanCompiler(Sheet.Value) };
-        var withoutStylesheet = new TwEngine(Windows);
-
-        // The fixture stylesheet only carries the colours its candidate list used, so compare on one
-        // the CSS definitely knows, then spot-check the table against Tailwind's published hexes.
-        uint viaCss = ValueOf(withStylesheet.GetPlan("bg-red-500").Light, TwPropertyId.Background).Rgba;
-        uint viaParser = ValueOf(withoutStylesheet.GetPlan("bg-red-500").Light, TwPropertyId.Background).Rgba;
-        Assert.Equal(viaCss, viaParser);
-
-        Assert.Equal(0xFFFB2C36u, viaParser);                                                          // red-500
-        Assert.Equal(0xFF2B7FFFu, ValueOf(withoutStylesheet.GetPlan("bg-blue-500").Light, TwPropertyId.Background).Rgba);
-        Assert.Equal(0xFF00BC7Du, ValueOf(withoutStylesheet.GetPlan("bg-emerald-500").Light, TwPropertyId.Background).Rgba);
+        var engine = new TwEngine(Windows);
+        Assert.Same(StylePlan.Empty, engine.GetPlan("bg-red-500"));
     }
 
     /// <summary>
@@ -310,43 +300,6 @@ public class TwCssPlanCompilerTests
                 Assert.Equal(precompiled.Light[i].Value.Rgba, atRuntime.Light[i].Value.Rgba);
                 Assert.Equal(precompiled.Light[i].Value.X, atRuntime.Light[i].Value.X, 3);
             }
-        }
-    }
-
-    // --------------------------------------------- differential vs TwParser
-
-    /// <summary>Every utility must lower identically through both front ends — colours included.</summary>
-    [Theory]
-    [InlineData("bg-red-500", TwPropertyId.Background)]
-    [InlineData("p-4", TwPropertyId.Padding)]
-    [InlineData("m-4", TwPropertyId.Margin)]
-    [InlineData("rounded-lg", TwPropertyId.CornerRadius)]
-    [InlineData("text-xl", TwPropertyId.FontSize)]
-    [InlineData("font-bold", TwPropertyId.FontWeight)]
-    [InlineData("opacity-50", TwPropertyId.Opacity)]
-    [InlineData("z-10", TwPropertyId.ZIndex)]
-    [InlineData("gap-4", TwPropertyId.Gap)]
-    [InlineData("order-2", TwPropertyId.Order)]
-    [InlineData("grid-cols-3", TwPropertyId.GridColumns)]
-    [InlineData("shrink-0", TwPropertyId.FlexShrink)]
-    public void Both_Front_Ends_Agree_On_Non_Color_Utilities(string utility, TwPropertyId id)
-    {
-        var viaCss = ValueOf(Compile(utility).Light, id);
-
-        var engine = new TwEngine(Windows);
-        var viaParser = ValueOf(engine.GetPlan(utility).Light, id);
-
-        Assert.Equal(viaParser.Kind, viaCss.Kind);
-        Assert.Equal(viaParser.Rgba, viaCss.Rgba);
-        AssertFloat(viaParser.X, viaCss.X);
-        AssertFloat(viaParser.Y, viaCss.Y);
-        AssertFloat(viaParser.Z, viaCss.Z);
-        AssertFloat(viaParser.W, viaCss.W);
-
-        static void AssertFloat(float expected, float actual)
-        {
-            if (float.IsNaN(expected)) Assert.True(float.IsNaN(actual), $"expected NaN, got {actual}");
-            else Assert.Equal(expected, actual, 3);
         }
     }
 

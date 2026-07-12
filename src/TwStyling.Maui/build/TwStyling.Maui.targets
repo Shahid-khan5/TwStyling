@@ -32,13 +32,15 @@
     vocabulary — arbitrary values, @theme tokens, @utility, @custom-variant — is understood exactly
     as Tailwind defines it, and nothing is parsed at runtime.
 
-    Without an entry stylesheet this is inert and the built-in class-name parser handles everything.
+    A project need not write a tw.css: without one, a default entry stylesheet is generated into obj
+    (see TwDefaultEntry below) so the pipeline still runs and Tailwind is still the single source of
+    truth. Adding a tw.css is how you customise — @theme tokens, @utility, plugins, safelists.
     ============================================================================================
   -->
 
   <PropertyGroup>
     <TwUseCssPipeline Condition="'$(TwUseCssPipeline)' == ''">true</TwUseCssPipeline>
-    <TwCssEntry Condition="'$(TwCssEntry)' == ''">$(MSBuildProjectDirectory)\tw.css</TwCssEntry>
+    <TwCssEntry Condition="'$(TwCssEntry)' == '' AND Exists('$(MSBuildProjectDirectory)\tw.css')">$(MSBuildProjectDirectory)\tw.css</TwCssEntry>
 
     <!--
       $(BaseIntermediateOutputPath) ("obj\"), not $(IntermediateOutputPath): this file is imported
@@ -52,9 +54,57 @@
 
     <TailwindCliVersion Condition="'$(TailwindCliVersion)' == ''">v4.3.2</TailwindCliVersion>
 
-    <_TwCssEnabled>false</_TwCssEnabled>
-    <_TwCssEnabled Condition="'$(TwUseCssPipeline)' == 'true' AND Exists('$(TwCssEntry)')">true</_TwCssEnabled>
+    <!-- No tw.css in the project: generate a default entry so the pipeline still runs. -->
+    <_TwDefaultEntry Condition="'$(TwCssEntry)' == ''">$(TwIntermediateDir)tw.css</_TwDefaultEntry>
+    <TwCssEntry Condition="'$(TwCssEntry)' == ''">$(_TwDefaultEntry)</TwCssEntry>
+
+    <_TwCssEnabled Condition="'$(TwUseCssPipeline)' == 'true'">true</_TwCssEnabled>
+    <_TwCssEnabled Condition="'$(_TwCssEnabled)' == ''">false</_TwCssEnabled>
   </PropertyGroup>
+
+  <!--
+    The default entry stylesheet, used when the project does not supply its own tw.css. It is the
+    stylesheet a MAUI project would write by hand: Tailwind, the native variants, and a scan of the
+    project's own sources. Writing a tw.css in the project overrides it entirely.
+
+    @source paths are relative to this file (in obj), hence the walk back up to the project.
+  -->
+  <Target Name="TwWriteDefaultEntry"
+          Condition="'$(_TwCssEnabled)' == 'true' AND '$(_TwDefaultEntry)' != ''">
+
+    <MakeDir Directories="$(TwIntermediateDir)" />
+
+    <PropertyGroup>
+      <_TwProjectFromEntry>$([MSBuild]::MakeRelative($(TwIntermediateDir), $(MSBuildProjectDirectory)).Replace('\','/'))</_TwProjectFromEntry>
+    </PropertyGroup>
+
+    <!--
+      An item's Include is not a string literal: MSBuild treats ';' as an item separator and '*' as
+      a wildcard to expand against the filesystem. Both appear in CSS. They must be escaped — %3B
+      and %2A — or the @source globs silently expand to nothing and the file loses those lines.
+    -->
+    <ItemGroup>
+      <_TwDefaultEntryLine Include="@import &quot;tailwindcss&quot;%3B" />
+      <_TwDefaultEntryLine Include="/%2A Native variants. Tailwind passes an unknown media type through verbatim, and the" />
+      <_TwDefaultEntryLine Include="   engine resolves it at build time for the platform head being compiled. %2A/" />
+      <_TwDefaultEntryLine Include="@custom-variant windows (@media windows)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant android (@media android)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant ios (@media ios)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant mac (@media mac)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant phone (@media phone)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant tablet (@media tablet)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant desktop (@media desktop)%3B" />
+      <_TwDefaultEntryLine Include="/%2A MAUI has no CSS :hover/:active on elements. These map to the engine's state vector. %2A/" />
+      <_TwDefaultEntryLine Include="@custom-variant pressed (&amp;:active)%3B" />
+      <_TwDefaultEntryLine Include="@source &quot;$(_TwProjectFromEntry)/%2A%2A/%2A.xaml&quot;%3B" />
+      <_TwDefaultEntryLine Include="@source &quot;$(_TwProjectFromEntry)/%2A%2A/%2A.cs&quot;%3B" />
+      <_TwDefaultEntryLine Include="@source not &quot;$(_TwProjectFromEntry)/obj/%2A%2A&quot;%3B" />
+      <_TwDefaultEntryLine Include="@source not &quot;$(_TwProjectFromEntry)/bin/%2A%2A&quot;%3B" />
+    </ItemGroup>
+
+    <WriteLinesToFile File="$(_TwDefaultEntry)" Lines="@(_TwDefaultEntryLine)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
 
   <!--
     The standalone CLI is a Node-free binary published per platform. It is cached in the NuGet
@@ -114,7 +164,7 @@
   </ItemGroup>
 
   <Target Name="TwBuildCss"
-          DependsOnTargets="TwRestoreCli"
+          DependsOnTargets="TwWriteDefaultEntry;TwRestoreCli"
           BeforeTargets="CoreCompile"
           Condition="'$(_TwCssEnabled)' == 'true'"
           Inputs="$(TwCssEntry);@(Compile);@(MauiXaml)"

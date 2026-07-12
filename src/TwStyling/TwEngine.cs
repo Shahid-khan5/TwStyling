@@ -38,17 +38,21 @@ public sealed class TwEngine
     }
 
     /// <summary>
-    /// The stylesheet Tailwind compiled for this app, when the build embedded one. It is the same
-    /// source of truth the generator used, so a class string that could not be precompiled — a
-    /// dynamic string, or an <c>idiom:</c> variant that depends on the device — still resolves
-    /// through Tailwind rather than through the built-in parser and its own tables.
+    /// The stylesheet Tailwind compiled for this app — the single source of truth for what every
+    /// utility means. The build embeds it (see TwStyling.Maui.targets), so class strings the
+    /// generator could not precompile (an interpolated string, or an <c>idiom:</c> variant that
+    /// depends on the device) resolve through the same Tailwind vocabulary as the literals.
     ///
-    /// Without this, one app would carry two vocabularies: the CSS one for literals and the parser
-    /// one for everything else, disagreeing on what <c>bg-blue-500</c> means.
+    /// There is deliberately no second vocabulary to fall back to. The engine used to carry its own
+    /// class-name parser and token tables, and the two disagreed — the same palette bug had to be
+    /// fixed in both. One front end cannot drift from itself.
     /// </summary>
     public TwCssPlanCompiler? Stylesheet { get; set; }
 
-    /// <summary>Get the compiled plan for a class string. Cached; thread-safe.</summary>
+    /// <summary>
+    /// Get the compiled plan for a class string. Cached; thread-safe. With no stylesheet attached
+    /// there is no vocabulary, so every plan is empty — a build that skipped the CSS pipeline.
+    /// </summary>
     public StylePlan GetPlan(string? classes)
     {
         if (string.IsNullOrWhiteSpace(classes))
@@ -57,9 +61,10 @@ public sealed class TwEngine
         if (_cache.TryGetValue(classes!, out var hit))
             return hit;
 
-        var compiled = Stylesheet is { } stylesheet
-            ? stylesheet.Compile(classes!, Environment)
-            : StylePlanCompiler.Compile(classes!, Environment);
+        if (Stylesheet is not { } stylesheet)
+            return StylePlan.Empty;
+
+        var compiled = stylesheet.Compile(classes!, Environment);
         var plan = _cache.GetOrAdd(classes!, compiled);
 
         // Report only from the thread that won the insert race — losers would
@@ -68,23 +73,11 @@ public sealed class TwEngine
         {
             if (WarnOnRuntimeParse)
                 sink(new TwDiagnostic(classes!, "",
-                    "parsed at runtime — this class string was not precompiled (dynamic string, or a platform:/idiom: variant the generator skips)"));
+                    "compiled at runtime — this class string was not precompiled (an interpolated string, or an idiom: variant the generator cannot resolve at build time)"));
             foreach (var d in plan.Diagnostics)
                 sink(d);
         }
         return plan;
-    }
-
-    /// <summary>
-    /// Validates a class string without an environment-filtered plan — used by
-    /// tooling (analyzer, tests) to report problems for ALL platforms.
-    /// Returns the diagnostics; empty means the string is fully valid.
-    /// </summary>
-    public static TwDiagnostic[] Validate(string classes)
-    {
-        var diagnostics = new List<TwDiagnostic>();
-        TwParser.Parse(classes, diagnostics.Add);
-        return diagnostics.ToArray();
     }
 
     /// <summary>

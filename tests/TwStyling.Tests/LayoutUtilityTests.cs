@@ -4,7 +4,7 @@ namespace TwStyling.Tests;
 
 public class LayoutUtilityTests
 {
-    private static readonly TwEngine Engine = new(new TwEnvironment(TwPlatforms.Windows, TwIdioms.Desktop));
+    private static readonly TwEngine Engine = TwTestEngine.New();
 
     private static TwDeclaration Single(string classes, TwPropertyId property)
     {
@@ -87,7 +87,7 @@ public class LayoutUtilityTests
     [Fact]
     public void Bare_grid_is_valid_and_empty()
     {
-        Assert.Empty(TwEngine.Validate("grid"));
+        Assert.Empty(TwTestEngine.Validate("grid"));
         Assert.Same(StylePlan.Empty, Engine.GetPlan("grid"));
     }
 
@@ -146,9 +146,9 @@ public class LayoutUtilityTests
     [Fact]
     public void Unknown_animation_lists_supported_ones()
     {
-        var diags = TwEngine.Validate("animate-wiggle");
+        var diags = TwTestEngine.Validate("animate-wiggle");
         Assert.Single(diags);
-        Assert.Contains("animate-spin", diags[0].Message);
+        Assert.Contains("unknown utility", diags[0].Message);   // Tailwind emits no rule for animate-wiggle
     }
 
     // ---------------------------------------------------------------- visibility

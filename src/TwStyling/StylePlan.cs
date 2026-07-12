@@ -97,19 +97,11 @@ public readonly struct BreakpointPlan(float minWidth, TwDeclaration[] light, TwD
 
 internal static class StylePlanCompiler
 {
-    public static StylePlan Compile(string classes, in TwEnvironment env)
-    {
-        if (string.IsNullOrWhiteSpace(classes))
-            return StylePlan.Empty;
-
-        var diagnostics = new List<TwDiagnostic>();
-        var items = TwParser.Parse(classes, diagnostics.Add);
-        return FromItems(items, env, classes, diagnostics);
-    }
-
     /// <summary>
-    /// Merges already-resolved items into a plan. Shared by the class-name parser and the
-    /// CSS pipeline so both front ends produce byte-identical plans from the same declarations.
+    /// Merges resolved declarations into a plan: platform/idiom filtering, theme and state buckets,
+    /// responsive overlays, last-wins with side-merging for Edges and Corners.
+    ///
+    /// Everything upstream of this — deciding what a class *means* — is Tailwind's job.
     /// </summary>
     internal static StylePlan FromItems(List<ParsedItem> items, in TwEnvironment env, string classes, List<TwDiagnostic> diagnostics)
     {

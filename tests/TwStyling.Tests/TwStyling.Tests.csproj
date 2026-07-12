@@ -25,6 +25,9 @@
   <ItemGroup>
     <!-- Shared with TwStyling.Css.Tests: real Tailwind v4 compiler output. -->
     <None Include="..\TwStyling.Css.Tests\Fixtures\tailwind-v4.css" Link="Fixtures\tailwind-v4.css" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Real Tailwind output for every utility the suite exercises. Regenerate with:
+         tools/tailwind/tailwindcss.exe -i Fixtures/tailwind-tests.entry.css -o Fixtures/tailwind-tests.css -->
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

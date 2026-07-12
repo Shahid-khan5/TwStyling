@@ -46,7 +46,6 @@ internal static class TwCssLowering
         ["outline-width"] = "'outline' has no native analog — use a border",
         ["outline-color"] = "'outline' has no native analog — use a border",
         ["outline-offset"] = "'outline' has no native analog — use a border",
-        ["text-overflow"] = "'text-overflow' is implied by line clamping",
         ["font-feature-settings"] = "OpenType feature settings have no native analog",
         ["font-variation-settings"] = "variable-font axes have no native analog",
         ["font-variant-numeric"] = "numeric font variants have no native analog",
@@ -90,6 +89,24 @@ internal static class TwCssLowering
         // except for the one that expresses line clamping.
         if (property.StartsWith("-webkit-", StringComparison.Ordinal) && property != "-webkit-line-clamp")
             return true;
+
+        // `truncate` is overflow-hidden + nowrap + text-overflow:ellipsis. The first two lower on
+        // their own, but the ellipsis is what makes it a truncation rather than a hard clip — and
+        // natively that is a one-line clamp. Anything else (clip) is already covered by overflow.
+        if (property == "text-overflow")
+        {
+            if (value is CssIdent { Name: "ellipsis" })
+                return Add(output, TwPropertyId.LineClamp, TwValue.Scalar(1));
+            return true;
+        }
+
+        // The utility styles its children through a descendant selector (space-x-*, divide-*).
+        // Native toolkits have no such thing — the container spaces its children itself.
+        if (property == CssStylesheetParser.DescendantSelector)
+        {
+            error = "styles children through a descendant selector, which native layout has no equivalent for — use gap-* on the container";
+            return false;
+        }
 
         if (WebOnly.TryGetValue(property, out var reason)) { error = reason; return false; }
 
@@ -195,13 +212,13 @@ internal static class TwCssLowering
                 // Tailwind's tracking scale is in em, which is exactly what the IR carries.
                 return Add(o, TwPropertyId.CharacterSpacingEm, TwValue.Scalar(Em(v, env)));
 
-            case "text-align": return Enum(v, o, TwPropertyId.TextAlign, ref error, TextAlignOf);
-            case "text-transform": return Enum(v, o, TwPropertyId.TextTransform, ref error, TextTransformOf);
-            case "text-decoration-line": return Enum(v, o, TwPropertyId.TextDecoration, ref error, TextDecorationOf);
+            case "text-align": return Enum(property, v, o, TwPropertyId.TextAlign, ref error, TextAlignOf);
+            case "text-transform": return Enum(property, v, o, TwPropertyId.TextTransform, ref error, TextTransformOf);
+            case "text-decoration-line": return Enum(property, v, o, TwPropertyId.TextDecoration, ref error, TextDecorationOf);
 
-            case "white-space": return Enum(v, o, TwPropertyId.LineBreak, ref error, WhiteSpaceOf);
+            case "white-space": return Enum(property, v, o, TwPropertyId.LineBreak, ref error, WhiteSpaceOf);
             case "overflow-wrap":
-            case "word-break": return Enum(v, o, TwPropertyId.LineBreak, ref error, WordBreakOf);
+            case "word-break": return Enum(property, v, o, TwPropertyId.LineBreak, ref error, WordBreakOf);
 
             case "-webkit-line-clamp": return Add(o, TwPropertyId.LineClamp, TwValue.Scalar(Number(v)));
 
@@ -209,10 +226,17 @@ internal static class TwCssLowering
             case "opacity": return Add(o, TwPropertyId.Opacity, TwValue.Scalar(Ratio(v)));
             case "box-shadow":
             case "text-shadow": return Shadow(v, env, o, ref error);
-            case "z-index": return Add(o, TwPropertyId.ZIndex, TwValue.Scalar(Number(v)));
+            // `z-auto` means "let the platform decide" — the native default, so nothing to set.
+            case "z-index":
+                return v is CssIdent { Name: "auto" }
+                    ? true
+                    : Add(o, TwPropertyId.ZIndex, TwValue.Scalar(Number(v)));
 
+            // `visibility: hidden` hides the element but KEEPS its space, which is opacity on native.
+            // Mapping it to IsVisible would collapse the layout — that is `display: none`, handled
+            // separately below. Getting these two confused silently reflows the page.
             case "visibility":
-                return Add(o, TwPropertyId.Visible, TwValue.Scalar(Ident(v) == "hidden" ? 0 : 1));
+                return Add(o, TwPropertyId.Opacity, TwValue.Scalar(Ident(v) == "hidden" ? 0 : 1));
 
             case "overflow":
             case "overflow-x":
@@ -226,7 +250,7 @@ internal static class TwCssLowering
             case "pointer-events":
                 return Add(o, TwPropertyId.PointerEventsNone, TwValue.Scalar(Ident(v) == "none" ? 1 : 0));
 
-            case "object-fit": return Enum(v, o, TwPropertyId.ObjectFit, ref error, ObjectFitOf);
+            case "object-fit": return Enum(property, v, o, TwPropertyId.ObjectFit, ref error, ObjectFitOf);
 
             // ------------------------------------------------------- transforms
             case "rotate": return Add(o, TwPropertyId.Rotate, TwValue.Scalar(Degrees(v, env)));
@@ -234,22 +258,47 @@ internal static class TwCssLowering
             case "translate": return Translate(v, env, o);
             case "transform-origin": return TransformOrigin(v, env, o, ref error);
 
+            // Tailwind composes `transform` out of the pieces it could not express as their own
+            // properties: skews and 3D rotations. `rotate`, `scale` and `translate` arrive as
+            // dedicated properties (above) and never come through here, so anything left is
+            // something native cannot do.
+            case "transform":
+            {
+                var text = v.ToString();
+                if (text.IndexOf("skew", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    error = "skew has no native analog — native transforms are translate, rotate and scale";
+                    return false;
+                }
+                if (text.IndexOf("rotateX", StringComparison.OrdinalIgnoreCase) >= 0
+                    || text.IndexOf("rotateY", StringComparison.OrdinalIgnoreCase) >= 0
+                    || text.IndexOf("perspective", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    error = "3D transforms have no native analog";
+                    return false;
+                }
+                return true; // an empty composition — the real values came through their own properties
+            }
+
             // ------------------------------------------------------ flex & grid
-            case "flex-direction": return Enum(v, o, TwPropertyId.FlexDirection, ref error, FlexDirectionOf);
-            case "flex-wrap": return Enum(v, o, TwPropertyId.FlexWrap, ref error, FlexWrapOf);
+            case "flex-direction": return Enum(property, v, o, TwPropertyId.FlexDirection, ref error, FlexDirectionOf);
+            case "flex-wrap": return Enum(property, v, o, TwPropertyId.FlexWrap, ref error, FlexWrapOf);
             case "flex-grow": return Add(o, TwPropertyId.FlexGrow, TwValue.Scalar(Number(v)));
             case "flex-shrink": return Add(o, TwPropertyId.FlexShrink, TwValue.Scalar(Number(v)));
             case "flex-basis": return FlexBasis(v, env, o, ref error);
             case "flex": return Flex(v, env, o, ref error);
             case "order": return Add(o, TwPropertyId.Order, TwValue.Scalar(Number(v)));
 
-            case "justify-content": return Enum(v, o, TwPropertyId.JustifyContent, ref error, JustifyOf);
-            case "align-items": return Enum(v, o, TwPropertyId.AlignItems, ref error, AlignItemsOf);
-            case "align-content": return Enum(v, o, TwPropertyId.AlignContent, ref error, AlignContentOf);
-            case "align-self": return Enum(v, o, TwPropertyId.FlexAlignSelf, ref error, AlignSelfFlexOf);
-            case "justify-self": return Enum(v, o, TwPropertyId.AlignSelfX, ref error, AlignOf);
+            case "justify-content": return Enum(property, v, o, TwPropertyId.JustifyContent, ref error, JustifyOf);
+            case "align-items": return Enum(property, v, o, TwPropertyId.AlignItems, ref error, AlignItemsOf);
+            case "align-content": return Enum(property, v, o, TwPropertyId.AlignContent, ref error, AlignContentOf);
+            case "align-self": return Enum(property, v, o, TwPropertyId.FlexAlignSelf, ref error, AlignSelfFlexOf);
+            // `auto` defers to the container's alignment — the native default, so nothing to set.
+            case "justify-self":
+                return Ident(v) == "auto" ? true : Enum(property, v, o, TwPropertyId.AlignSelfX, ref error, AlignOf);
 
-            case "place-self": return PlaceSelf(v, o, ref error);
+            case "place-self":
+                return Ident(v) == "auto" ? true : PlaceSelf(v, o, ref error);
             case "place-content": return PlaceContent(v, o, ref error);
 
             case "grid-template-columns": return Add(o, TwPropertyId.GridColumns, TwValue.Scalar(TrackCount(v, ref error)));
@@ -287,12 +336,16 @@ internal static class TwCssLowering
         return true;
     }
 
-    private static bool Enum<T>(CssValue v, List<TwDeclaration> o, TwPropertyId id, ref string? error, Func<string, T?> map)
+    /// <summary>
+    /// The CSS property is named in the failure on purpose: "'capitalize' is not a supported value"
+    /// leaves the reader guessing which property rejected it.
+    /// </summary>
+    private static bool Enum<T>(string property, CssValue v, List<TwDeclaration> o, TwPropertyId id, ref string? error, Func<string, T?> map)
         where T : struct, Enum
     {
         var name = Ident(v);
         if (map(name) is { } result) return Add(o, id, TwValue.Enum(Convert.ToByte(result)));
-        error = $"'{name}' is not a supported value";
+        error = $"{property}: '{name}' has no native equivalent";
         return false;
     }
 
@@ -439,9 +492,18 @@ internal static class TwCssLowering
                 return true; // native default sizing
             case CssNumber { Unit: CssUnit.Percent } p when Math.Abs(p.Value - 100) < 0.001:
                 return Add(o, id, TwValue.Scalar(TwValue.Full));
+
+            // A percentage of the parent has no native property; the native way to say "half the
+            // row" is a flex basis or a grid column.
             case CssNumber { Unit: CssUnit.Percent }:
-                error = $"fractional size '{v}' has no native analog — use flex-basis or a grid column";
+                error = $"fractional size '{v}' has no native analog — use basis-1/2 (in a flex row) or a grid column";
                 return false;
+
+            // Viewport units: the window, not the parent. w-full is the native intent in practice.
+            case CssNumber { Unit: CssUnit.Vw or CssUnit.Vh }:
+                error = $"viewport size '{v}' has no native analog — use w-full / h-full to fill the parent";
+                return false;
+
             case CssIdent ident:
                 error = $"size '{ident.Name}' has no native analog";
                 return false;
@@ -509,8 +571,16 @@ internal static class TwCssLowering
                 case CssNumber { Unit: CssUnit.Percent } p:
                     if (x is null) x = (float)(p.Value / 100); else y = (float)(p.Value / 100);
                     break;
+
+                // Tailwind writes the corners numerically — `origin-top-left` is `0 0`, not
+                // `top left`. A bare 0 is the leading edge; any other length would need the
+                // element's size, which we do not have at compile time.
+                case CssNumber { Value: 0 }:
+                    if (x is null) x = 0f; else y = 0f;
+                    break;
+
                 default:
-                    error = $"transform-origin '{part}' has no native analog";
+                    error = $"transform-origin '{part}' has no native analog — use origin-{{top,right,bottom,left,center}}";
                     return false;
             }
         }
@@ -542,6 +612,15 @@ internal static class TwCssLowering
 
         var parts = v is CssList list ? list.Items : new[] { v };
         if (parts[0] is CssNumber grow) Add(o, TwPropertyId.FlexGrow, TwValue.Scalar((float)grow.Value));
+
+        // The one-value form `flex: 1` is shorthand for `1 1 0%` — Tailwind emits exactly that for
+        // flex-1, so reading only the grow factor would silently drop the shrink and basis.
+        if (parts.Count == 1)
+        {
+            Add(o, TwPropertyId.FlexShrink, TwValue.Scalar(1));
+            return Add(o, TwPropertyId.FlexBasis, TwValue.AbsoluteLength(0));
+        }
+
         if (parts.Count > 1 && parts[1] is CssNumber shrink) Add(o, TwPropertyId.FlexShrink, TwValue.Scalar((float)shrink.Value));
         if (parts.Count > 2) return FlexBasis(parts[2], env, o, ref error);
         return true;

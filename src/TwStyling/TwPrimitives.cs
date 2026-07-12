@@ -354,6 +354,13 @@ public readonly struct TwDeclaration(TwPropertyId property, TwValue value)
     public readonly TwValue Value = value;
 }
 
+/// <summary>A declaration plus the variants it is qualified by — the input to plan merging.</summary>
+internal readonly struct ParsedItem(TwVariantSet variants, TwDeclaration declaration)
+{
+    public readonly TwVariantSet Variants = variants;
+    public readonly TwDeclaration Declaration = declaration;
+}
+
 /// <summary>
 /// The full variant qualification of a utility, e.g. <c>ios:dark:pressed:bg-blue-700</c>.
 /// Platform and idiom are static per process and filtered out at plan-compile time.

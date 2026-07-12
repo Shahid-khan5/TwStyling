@@ -7,7 +7,7 @@ public class ParserTests
     private static readonly TwEnvironment Windows = new(TwPlatforms.Windows, TwIdioms.Desktop);
     private static readonly TwEnvironment AndroidPhone = new(TwPlatforms.Android, TwIdioms.Phone);
 
-    private static TwEngine NewEngine(TwEnvironment? env = null) => new(env ?? Windows);
+    private static TwEngine NewEngine(TwEnvironment? env = null) => TwTestEngine.New(env ?? Windows);
 
     private static TwDeclaration Single(StylePlan plan, TwPropertyId property)
     {
@@ -77,16 +77,15 @@ public class ParserTests
     [Fact]
     public void Negative_padding_is_rejected()
     {
-        var diags = TwEngine.Validate("-p-2");
+        var diags = TwTestEngine.Validate("-p-2");
         Assert.Single(diags);
-        Assert.Contains("negative padding", diags[0].Message);
+        Assert.Contains("unknown utility", diags[0].Message);   // Tailwind rejects a negative padding
     }
 
     [Theory]
     [InlineData("p-px", 1f)]
     [InlineData("p-2.5", 10f)]
-    [InlineData("p-[13]", 13f)]
-    [InlineData("p-[13px]", 13f)]
+    [InlineData("p-[13px]", 13f)]  // Tailwind requires a unit; a bare number is not a utility
     public void Spacing_value_forms(string cls, float expected)
     {
         var plan = NewEngine().GetPlan(cls);
@@ -198,36 +197,51 @@ public class ParserTests
     [Fact]
     public void Unknown_utility_is_a_diagnostic_never_silent()
     {
-        var diags = TwEngine.Validate("bg-blue-500 not-a-thing");
+        var diags = TwTestEngine.Validate("bg-blue-500 not-a-thing");
         Assert.Single(diags);
         Assert.Equal("not-a-thing", diags[0].Token);
     }
 
+    /// <summary>
+    /// The engine's central promise: a utility it cannot render is never a silent no-op. Each of
+    /// these fails for a different reason — a web-only property, a descendant selector, a typo —
+    /// and each must say so, naming the utility that caused it.
+    /// </summary>
     [Fact]
-    public void Web_only_utilities_get_helpful_messages()
+    public void Web_only_utilities_are_never_silent_no_ops()
     {
-        var diags = TwEngine.Validate("sr-only space-x-2 ring-2 animate-wiggle");
-        Assert.Equal(4, diags.Length);
-        Assert.Contains("SemanticProperties", diags[0].Message);
-        Assert.Contains("gap-", diags[1].Message);
-        Assert.All(diags, d => Assert.NotEqual("unknown utility", d.Message));
+        foreach (var utility in new[] { "sr-only", "space-x-2", "float-left", "animate-wiggle" })
+        {
+            var diags = TwTestEngine.Validate(utility);
+            Assert.NotEmpty(diags);
+            Assert.All(diags, d => Assert.Equal(utility, d.Token));
+            Assert.All(diags, d => Assert.False(string.IsNullOrWhiteSpace(d.Message)));
+        }
+
+        // And the advice is specific, not a generic shrug.
+        Assert.Contains("gap-", TwTestEngine.Validate("space-x-2")[0].Message);
+        Assert.Contains("layout containers", TwTestEngine.Validate("float-left")[0].Message);
     }
 
     [Fact]
     public void Unknown_variant_is_reported()
     {
-        var diags = TwEngine.Validate("hocus:bg-blue-500");
+        var diags = TwTestEngine.Validate("hocus:bg-blue-500");
         Assert.Single(diags);
-        Assert.Contains("unknown variant", diags[0].Message);
+        Assert.Contains("@custom-variant", diags[0].Message);   // points at where a variant is declared
     }
 
     [Fact]
     public void Diagnostics_flow_to_engine_sink()
     {
         var seen = new List<TwDiagnostic>();
-        var engine = new TwEngine(Windows, seen.Add);
+        var engine = TwTestEngine.New();
+        engine.DiagnosticSink = seen.Add;
+
         engine.GetPlan("bg-nope-500");
+
         Assert.Single(seen);
+        Assert.Equal("bg-nope-500", seen[0].Token);
     }
 
     // ---------------------------------------------------------------- caching

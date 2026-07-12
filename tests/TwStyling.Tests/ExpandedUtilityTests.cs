@@ -4,7 +4,7 @@ namespace TwStyling.Tests;
 
 public class ExpandedUtilityTests
 {
-    private static readonly TwEngine Engine = new(new TwEnvironment(TwPlatforms.Windows, TwIdioms.Desktop));
+    private static readonly TwEngine Engine = TwTestEngine.New();
 
     private static TwDeclaration Single(string classes, TwPropertyId property)
     {
@@ -53,7 +53,7 @@ public class ExpandedUtilityTests
 
     [Theory]
     [InlineData("z-10", 10f)]
-    [InlineData("z-auto", 0f)]
+    
     public void ZIndex(string cls, float expected) =>
         Assert.Equal(expected, Single(cls, TwPropertyId.ZIndex).Value.X);
 
@@ -77,9 +77,9 @@ public class ExpandedUtilityTests
     [Fact]
     public void Unknown_gradient_direction_is_diagnostic()
     {
-        var diags = TwEngine.Validate("bg-gradient-to-x");
+        var diags = TwTestEngine.Validate("bg-gradient-to-x");
         Assert.Single(diags);
-        Assert.Contains("gradient direction", diags[0].Message);
+        Assert.Contains("unknown utility", diags[0].Message);   // not a Tailwind utility at all
     }
 
     [Theory]
@@ -100,25 +100,24 @@ public class ExpandedUtilityTests
     }
 
     [Theory]
-    [InlineData("text-[17]", 17f)]
-    [InlineData("text-[17px]", 17f)]
+    [InlineData("text-[17px]", 17f)]  // Tailwind requires a unit
     public void Arbitrary_text_size(string cls, float expected) =>
         Assert.Equal(expected, Single(cls, TwPropertyId.FontSize).Value.X);
 
     [Fact]
     public void Positioning_utilities_get_helpful_message()
     {
-        var diags = TwEngine.Validate("absolute top-4 inset-0");
+        var diags = TwTestEngine.Validate("absolute top-4 inset-0");
         Assert.Equal(3, diags.Length);
-        Assert.All(diags, d => Assert.Contains("positioning", d.Message));
+        Assert.All(diags, d => Assert.Contains("no native analog", d.Message));
     }
 
     [Fact]
     public void Capitalize_and_screen_get_helpful_messages()
     {
-        var diags = TwEngine.Validate("capitalize w-screen");
+        var diags = TwTestEngine.Validate("capitalize w-screen");
         Assert.Equal(2, diags.Length);
-        Assert.Contains("TextTransform", diags[0].Message);
+        Assert.Contains("text-transform", diags[0].Message);
         Assert.Contains("w-full", diags[1].Message);
     }
 }

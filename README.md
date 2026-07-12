@@ -99,8 +99,9 @@ Add a `tw.css` next to your `.csproj`:
 That is the whole install. On first build the standalone Tailwind CLI (a Node-free binary) is fetched
 once into your NuGet cache; set `<TailwindCliPath>` to your own copy for offline or CI builds.
 
-Without a `tw.css`, Tw falls back to its built-in class-name parser and everything still works — you
-just lose arbitrary values, custom tokens, and plugins.
+A `tw.css` is optional: without one the build generates a default entry stylesheet (Tailwind plus the
+native variants, scanning your sources) so the pipeline still runs. You add a `tw.css` when you want
+to customise — `@theme` tokens, `@utility`, plugins, safelists.
 
 XAML namespace: `xmlns:tw="https://tw"`.
 
@@ -165,27 +166,50 @@ Assembly names, namespaces, and package IDs all match.
 
 ---
 
+## One vocabulary
+
+Tailwind is the *only* thing that decides what a class means. The engine has no class-name parser and
+no copy of Tailwind's theme — those existed once, and drifted: the same palette bug had to be fixed in
+them twice. They are deleted.
+
+The consequence is that every path agrees by construction:
+
+| | resolved by |
+|---|---|
+| a literal in XAML or C# | the stylesheet, at build time |
+| an interpolated string (`$"bg-{shade}"`) | the same stylesheet, embedded in the app |
+| `idiom:` variants (one iOS build serves iPhone and iPad) | the same stylesheet, on the device |
+| the `TW0001` analyzer in your IDE | the same stylesheet |
+
+Tailwind only emits rules for classes it can *see*, so a class built at runtime must be safelisted:
+
+```css
+@source inline("bg-{red,blue,green}-{100,500,900}");
+```
+
+Anything the engine cannot render is a diagnostic, never a silent no-op — `float-left` tells you to
+use a layout container, `space-x-2` tells you to use `gap-*`.
+
 ## Status
 
-**Preview.** The architecture is settled, the engine is well covered (272 tests), and the pipeline is
-verified on a running app — including a live check that build-time and runtime class strings resolve
-to the same values. What to know before shipping:
+**1.0.0-rc.1.** The architecture is settled, the API is what 1.0 will ship, and 256 tests plus a live
+run on WinUI cover it — including an in-app check that build-time and runtime resolution of the same
+class string produce the same values.
 
-- **Heads:** all four (Windows, Android, iOS, MacCatalyst) build in CI, and platform variants are
-  verified to compile per-head. Only Windows has been *run* — iOS and macOS need a Mac.
-- **Colors are Tailwind v4's.** `bg-blue-500` is `#2B7FFF`, the oklch value Tailwind actually
-  specifies — not v3's `#3B82F6`. Both the CSS pipeline and the fallback parser use it, so there is
-  exactly one palette (`tools/gen-palette.mjs` generates the parser's table from Tailwind's own
-  theme). If you pinned colors against an older preview, they will shift.
+It is `rc` and not final for one reason: **iOS and Android have not been run.** All four heads build
+in CI and their generated plans are verified correct per platform (`windows:p-5 android:p-3 ios:p-4`
+yields 20px, 12px and 16px respectively), but "it compiles" is not "it renders". That needs a device.
+
+Also worth knowing:
+
+- **Colors are Tailwind v4's.** `bg-blue-500` is `#2B7FFF` — the oklch value Tailwind specifies — not
+  v3's `#3B82F6`. If you pinned colors against an older preview, they will shift.
 - Grid `col-end-*` / `row-end-*` are not lowered yet (`col-span-*` is).
-- The API is not frozen. `0.2.0-preview.1` renamed the assemblies to match the package IDs; expect
-  more churn before 1.0.
 
 ## Roadmap
 
-- **v1**: retire the built-in class-name parser entirely, then a WPF adapter — which doubles as the
-  audit of whether the adapter abstraction is real.
-- **Later**: a component library on the engine; docs and the Claude skill generated from the same
-  tables.
+- **1.0**: run it on iOS and Android.
+- **Next**: a WPF adapter — which doubles as the audit of whether the adapter abstraction is real.
+- **Later**: a component library on the engine.
 
 MIT.

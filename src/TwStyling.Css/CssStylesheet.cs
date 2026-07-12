@@ -118,6 +118,12 @@ internal sealed class CssStylesheet
 /// </summary>
 internal static class CssStylesheetParser
 {
+    /// <summary>
+    /// Pseudo-property recorded when a utility's effect lives in a nested rule that targets other
+    /// elements (space-x-*, divide-*). It carries the selector so the lowering can explain itself.
+    /// </summary>
+    internal const string DescendantSelector = "-tw-descendant-selector";
+
     public static CssStylesheet Parse(string css)
     {
         var rules = new List<CssRule>();
@@ -193,6 +199,17 @@ internal static class CssStylesheetParser
             }
 
             i++; // consume '{'
+            if (className is not null && prelude.IndexOf('&') >= 0 && PseudoOf(prelude) == CssPseudo.None)
+            {
+                // A nested rule that styles *other* elements — space-x-* and divide-* are
+                // `:where(& > :not(:last-child))`. Native toolkits have no descendant selectors, so
+                // this cannot be lowered. Record it against the class rather than skipping in
+                // silence: dropping it would leave the utility with no declarations AND no
+                // diagnostic, the one thing the engine promises never to do.
+                declarations.Add(new CssDeclaration(DescendantSelector, prelude, false));
+                SkipBlock(css, ref i);
+                continue;
+            }
             Flush();
             DispatchBlock(css, ref i, prelude, context, className, rules, variables, scoped, inUtilities);
         }

@@ -11,14 +11,15 @@ using TwStyling.Css;
 namespace TwStyling.Generators;
 
 /// <summary>
-/// Parses Tailwind class strings at BUILD TIME so the runtime never parses them:
-/// - every literal <c>.Tw("...")</c> call in C# and every <c>tw:Tw.Class</c> /
-///   <c>Tw.ActiveClass</c> literal in XAML (AdditionalFiles) is compiled into a
-///   <see cref="StylePlan"/> and preloaded via a <c>[ModuleInitializer]</c> into the
-///   engine cache. At runtime, applying that class is a dictionary hit, not a parse.
+/// Lowers Tailwind's compiled stylesheet into style plans at BUILD TIME, so the runtime does no
+/// compilation at all:
+/// - every literal <c>.Tw("...")</c> call in C# and every <c>tw:Tw.Class</c> / <c>Tw.ActiveClass</c>
+///   literal in XAML becomes a <see cref="StylePlan"/>, preloaded into the engine cache by a
+///   <c>[ModuleInitializer]</c>. Applying that class at runtime is a dictionary hit.
 /// - invalid XAML class strings become build errors (TWG001).
-/// - only genuinely dynamic strings (interpolation, bindings) and device-dependent
-///   <c>platform:</c>/<c>idiom:</c> variants fall through to the runtime parser.
+/// - class strings that cannot be known at build time — interpolated strings, and <c>idiom:</c>
+///   variants that depend on the device — are resolved at runtime against the same stylesheet,
+///   which the build embeds into the app assembly. There is only ever one vocabulary.
 ///
 /// C# and XAML share the SAME preload path — there is no C#-only interceptor fast lane.
 /// (Interceptors were removed: they optimized only C#, couldn't help XAML, and forced a
@@ -219,6 +220,11 @@ public sealed class TwSourceGenerator : IIncrementalGenerator
             }
         }
 
+        // No stylesheet, no vocabulary: the project opted out of the CSS pipeline
+        // (TwUseCssPipeline=false), so there is nothing to precompile.
+        if (cssCompiler is null)
+            return;
+
         // Compile every unique literal whose plan is fully knowable at build time.
         var plans = new Dictionary<string, StylePlan>(StringComparer.Ordinal);
 
@@ -227,23 +233,12 @@ public sealed class TwSourceGenerator : IIncrementalGenerator
             if (plans.ContainsKey(classes) || classes.Contains('{'))
                 return;
 
-            StylePlan plan;
-            if (cssCompiler is not null)
-            {
-                // The idiom is a device fact, not a build fact — leave those strings to the runtime.
-                if (cssCompiler.HasIdiomVariant(classes))
-                    return;
-                plan = cssCompiler.Compile(classes, environment);
-            }
-            else
-            {
-                var (hasPlatform, hasIdiom) = ScanEnvVariants(classes);
-                // idiom: variants are always runtime-resolved; platform: variants only when
-                // we couldn't pin the target platform (a platform-neutral compilation).
-                if (hasIdiom || (hasPlatform && targetPlatform is null))
-                    return;
-                plan = StylePlanCompiler.Compile(classes, environment);
-            }
+            // The idiom is a device fact, not a build fact — one iOS head serves iPhone and iPad —
+            // so those strings are left for the runtime to resolve against the same stylesheet.
+            if (cssCompiler.HasIdiomVariant(classes))
+                return;
+
+            var plan = cssCompiler.Compile(classes, environment);
 
             if (plan.Diagnostics.Length > 0)
             {
@@ -278,32 +273,6 @@ public sealed class TwSourceGenerator : IIncrementalGenerator
         EmitPlans(spc, plans, fields);
     }
 
-    /// <summary>Whether a class string carries any platform: and/or idiom: variant prefix.</summary>
-    private static (bool Platform, bool Idiom) ScanEnvVariants(string classes)
-    {
-        bool platform = false, idiom = false;
-        foreach (var token in classes.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
-        {
-            // Split on ':' only outside brackets — same rule as the parser's
-            // IndexOfOutsideBrackets, so arbitrary values containing ':' can't diverge.
-            int start = 0, depth = 0;
-            for (int i = 0; i < token.Length; i++)
-            {
-                if (token[i] == '[') depth++;
-                else if (token[i] == ']') depth--;
-                else if (token[i] == ':' && depth == 0)
-                {
-                    if (TwTables.Variants.TryGetValue(token.Substring(start, i - start), out var kind))
-                    {
-                        if (kind.Class == TwVariantClass.Platform) platform = true;
-                        else if (kind.Class == TwVariantClass.Idiom) idiom = true;
-                    }
-                    start = i + 1;
-                }
-            }
-        }
-        return (platform, idiom);
-    }
 
     private static void EmitPlans(
         SourceProductionContext spc, Dictionary<string, StylePlan> plans, Dictionary<string, string> fields)
