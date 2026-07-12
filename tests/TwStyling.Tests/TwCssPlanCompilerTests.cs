@@ -267,14 +267,26 @@ public class TwCssPlanCompilerTests
         Assert.Equal(0xFFFB2C36u, background.Rgba); // v4
     }
 
+    /// <summary>
+    /// A project with no tw.css falls back to the built-in class-name parser — and that parser must
+    /// still speak the same Tailwind. Its palette tables are generated from Tailwind's own oklch
+    /// theme (tools/gen-palette.mjs), so both front ends agree on every colour.
+    /// </summary>
     [Fact]
-    public void Without_A_Stylesheet_The_Engine_Still_Falls_Back_To_The_Parser()
+    public void The_Fallback_Parser_Carries_The_Same_Palette_As_The_Stylesheet()
     {
-        var engine = new TwEngine(Windows); // no stylesheet — a project with no tw.css
+        var withStylesheet = new TwEngine(Windows) { Stylesheet = new TwCssPlanCompiler(Sheet.Value) };
+        var withoutStylesheet = new TwEngine(Windows);
 
-        var background = ValueOf(engine.GetPlan("bg-red-500").Light, TwPropertyId.Background);
+        // The fixture stylesheet only carries the colours its candidate list used, so compare on one
+        // the CSS definitely knows, then spot-check the table against Tailwind's published hexes.
+        uint viaCss = ValueOf(withStylesheet.GetPlan("bg-red-500").Light, TwPropertyId.Background).Rgba;
+        uint viaParser = ValueOf(withoutStylesheet.GetPlan("bg-red-500").Light, TwPropertyId.Background).Rgba;
+        Assert.Equal(viaCss, viaParser);
 
-        Assert.Equal(0xFFEF4444u, background.Rgba); // v3 tables, as before the CSS pipeline
+        Assert.Equal(0xFFFB2C36u, viaParser);                                                          // red-500
+        Assert.Equal(0xFF2B7FFFu, ValueOf(withoutStylesheet.GetPlan("bg-blue-500").Light, TwPropertyId.Background).Rgba);
+        Assert.Equal(0xFF00BC7Du, ValueOf(withoutStylesheet.GetPlan("bg-emerald-500").Light, TwPropertyId.Background).Rgba);
     }
 
     /// <summary>
@@ -303,11 +315,9 @@ public class TwCssPlanCompilerTests
 
     // --------------------------------------------- differential vs TwParser
 
-    /// <summary>
-    /// Non-color utilities must lower identically through both front ends. Colors are excluded on
-    /// purpose — see <see cref="The_v4_Palette_Differs_From_The_v3_Palette_We_Hardcoded"/>.
-    /// </summary>
+    /// <summary>Every utility must lower identically through both front ends — colours included.</summary>
     [Theory]
+    [InlineData("bg-red-500", TwPropertyId.Background)]
     [InlineData("p-4", TwPropertyId.Padding)]
     [InlineData("m-4", TwPropertyId.Margin)]
     [InlineData("rounded-lg", TwPropertyId.CornerRadius)]
@@ -327,6 +337,7 @@ public class TwCssPlanCompilerTests
         var viaParser = ValueOf(engine.GetPlan(utility).Light, id);
 
         Assert.Equal(viaParser.Kind, viaCss.Kind);
+        Assert.Equal(viaParser.Rgba, viaCss.Rgba);
         AssertFloat(viaParser.X, viaCss.X);
         AssertFloat(viaParser.Y, viaCss.Y);
         AssertFloat(viaParser.Z, viaCss.Z);
@@ -337,22 +348,6 @@ public class TwCssPlanCompilerTests
             if (float.IsNaN(expected)) Assert.True(float.IsNaN(actual), $"expected NaN, got {actual}");
             else Assert.Equal(expected, actual, 3);
         }
-    }
-
-    /// <summary>
-    /// Our palette tables were generated from Tailwind v3's colors.js; v4 redefined the palette in
-    /// oklch. Adopting the CSS pipeline therefore *changes rendered colors* — an intended, visible
-    /// consequence of tracking real Tailwind, not a lowering bug.
-    /// </summary>
-    [Fact]
-    public void The_v4_Palette_Differs_From_The_v3_Palette_We_Hardcoded()
-    {
-        uint viaCss = ValueOf(Compile("bg-red-500").Light, TwPropertyId.Background).Rgba;
-        uint viaParser = ValueOf(new TwEngine(Windows).GetPlan("bg-red-500").Light, TwPropertyId.Background).Rgba;
-
-        Assert.Equal(0xFFFB2C36u, viaCss);    // v4, oklch(63.7% 0.237 25.331)
-        Assert.Equal(0xFFEF4444u, viaParser); // v3, colors.js
-        Assert.NotEqual(viaParser, viaCss);
     }
 
     [Fact]

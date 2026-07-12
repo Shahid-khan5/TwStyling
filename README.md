@@ -165,23 +165,6 @@ Assembly names, namespaces, and package IDs all match.
 
 ---
 
-## Upgrading: colors move
-
-Tailwind v4 redefined the palette in oklch, so real Tailwind renders slightly different colors than
-the old built-in tables: `bg-blue-500` moves `#3B82F6` → `#2B7FFF`. That is correct — it is what
-Tailwind actually specifies — but it restyles an existing app.
-
-To adopt the pipeline without changing a single rendered color:
-
-```xml
-<TwPalette>v3</TwPalette>
-```
-
-Everything else (arbitrary values, `@theme`, variants) still works; only the palette is pinned. Drop
-the property when you are ready to take the v4 colors.
-
----
-
 ## Status
 
 **Preview.** The architecture is settled, the engine is well covered (272 tests), and the pipeline is
@@ -190,7 +173,10 @@ to the same values. What to know before shipping:
 
 - **Heads:** all four (Windows, Android, iOS, MacCatalyst) build in CI, and platform variants are
   verified to compile per-head. Only Windows has been *run* — iOS and macOS need a Mac.
-- **Colors move** on upgrade unless you set `<TwPalette>v3</TwPalette>` (above).
+- **Colors are Tailwind v4's.** `bg-blue-500` is `#2B7FFF`, the oklch value Tailwind actually
+  specifies — not v3's `#3B82F6`. Both the CSS pipeline and the fallback parser use it, so there is
+  exactly one palette (`tools/gen-palette.mjs` generates the parser's table from Tailwind's own
+  theme). If you pinned colors against an older preview, they will shift.
 - Grid `col-end-*` / `row-end-*` are not lowered yet (`col-span-*` is).
 - The API is not frozen. `0.2.0-preview.1` renamed the assemblies to match the package IDs; expect
   more churn before 1.0.

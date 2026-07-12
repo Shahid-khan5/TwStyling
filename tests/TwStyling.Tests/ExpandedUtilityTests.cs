@@ -69,9 +69,9 @@ public class ExpandedUtilityTests
     {
         const string cls = "bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500";
         Assert.Equal((byte)TwGradientDirection.Right, (byte)Single(cls, TwPropertyId.GradientDirection).Value.X);
-        Assert.Equal(0xFF6366F1u, Single(cls, TwPropertyId.GradientFrom).Value.Rgba);
-        Assert.Equal(0xFFA855F7u, Single(cls, TwPropertyId.GradientVia).Value.Rgba);
-        Assert.Equal(0xFFEC4899u, Single(cls, TwPropertyId.GradientTo).Value.Rgba);
+        Assert.Equal(0xFF615FFFu, Single(cls, TwPropertyId.GradientFrom).Value.Rgba);
+        Assert.Equal(0xFFAD46FFu, Single(cls, TwPropertyId.GradientVia).Value.Rgba);
+        Assert.Equal(0xFFF6339Au, Single(cls, TwPropertyId.GradientTo).Value.Rgba);
     }
 
     [Fact]

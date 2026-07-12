@@ -23,7 +23,7 @@ public class ParserTests
     {
         var plan = NewEngine().GetPlan("bg-blue-500");
         var decl = Single(plan, TwPropertyId.Background);
-        Assert.Equal(0xFF3B82F6u, decl.Value.Rgba);
+        Assert.Equal(0xFF2B7FFFu, decl.Value.Rgba);
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public class ParserTests
     {
         var plan = NewEngine().GetPlan("text-xl text-slate-900");
         Assert.Equal(20f, Single(plan, TwPropertyId.FontSize).Value.X);
-        Assert.Equal(0xFF0F172Au, Single(plan, TwPropertyId.TextColor).Value.Rgba);
+        Assert.Equal(0xFF0F172Bu, Single(plan, TwPropertyId.TextColor).Value.Rgba);
         Assert.Equal(28f / 20, Single(plan, TwPropertyId.LineHeight).Value.X, 3);
     }
 
@@ -127,7 +127,7 @@ public class ParserTests
     public void Explicit_border_color_suppresses_default()
     {
         var plan = NewEngine().GetPlan("border border-red-500");
-        Assert.Equal(0xFFEF4444u, Single(plan, TwPropertyId.BorderColor).Value.Rgba);
+        Assert.Equal(0xFFFB2C36u, Single(plan, TwPropertyId.BorderColor).Value.Rgba);
     }
 
     // ---------------------------------------------------------------- variants
@@ -149,14 +149,14 @@ public class ParserTests
         var plan = NewEngine().GetPlan("bg-white dark:bg-slate-900");
         Assert.True(plan.DiffersByTheme);
         Assert.Equal(0xFFFFFFFFu, plan.Light.Single(d => d.Property == TwPropertyId.Background).Value.Rgba);
-        Assert.Equal(0xFF0F172Au, plan.Dark.Single(d => d.Property == TwPropertyId.Background).Value.Rgba);
+        Assert.Equal(0xFF0F172Bu, plan.Dark.Single(d => d.Property == TwPropertyId.Background).Value.Rgba);
     }
 
     [Fact]
     public void Dark_variant_wins_regardless_of_token_order()
     {
         var plan = NewEngine().GetPlan("dark:bg-slate-900 bg-white");
-        Assert.Equal(0xFF0F172Au, plan.Dark.Single(d => d.Property == TwPropertyId.Background).Value.Rgba);
+        Assert.Equal(0xFF0F172Bu, plan.Dark.Single(d => d.Property == TwPropertyId.Background).Value.Rgba);
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public class ParserTests
         var plan = NewEngine().GetPlan("bg-indigo-600 pressed:bg-indigo-700");
         Assert.True(plan.HasStates);
         var pressed = plan.States.Single(s => s.State == TwInteractiveState.Pressed);
-        Assert.Equal(0xFF4338CAu, pressed.Light.Single().Value.Rgba);
+        Assert.Equal(0xFF432DD7u, pressed.Light.Single().Value.Rgba);
     }
 
     [Fact]
@@ -286,6 +286,6 @@ public class ParserTests
     public void Last_wins_for_conflicting_scalar_utilities()
     {
         var plan = NewEngine().GetPlan("bg-red-500 bg-blue-500");
-        Assert.Equal(0xFF3B82F6u, Single(plan, TwPropertyId.Background).Value.Rgba);
+        Assert.Equal(0xFF2B7FFFu, Single(plan, TwPropertyId.Background).Value.Rgba);
     }
 }

@@ -41,26 +41,6 @@
          assembly. Update, not Include: the SDK's default None glob already picked these up. -->
     <None Update="build\TwStyling.Maui.props" Pack="true" PackagePath="build\TwStyling.Maui.props" />
     <None Update="build\TwStyling.Maui.targets" Pack="true" PackagePath="build\TwStyling.Maui.targets" />
-    <!-- Not packed here — see TwPackPaletteV3 below. -->
   </ItemGroup>
-
-  <!--
-    build\palette-v3.css pins the colour palette to Tailwind's pre-v4 hexes (<TwPalette>v3</TwPalette>).
-
-    It cannot be packed with a plain <None Pack="true"> item: the MAUI SDK globs **/*.css into
-    MauiCss and *removes* the matched files from None, and because the SDK's targets are imported
-    after this project's body, that removal wins over anything declared here. Contributing the file
-    at pack time bypasses the item-glob ordering entirely.
-  -->
-  <PropertyGroup>
-    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);TwPackPaletteV3</TargetsForTfmSpecificContentInPackage>
-  </PropertyGroup>
-
-  <Target Name="TwPackPaletteV3">
-    <ItemGroup>
-      <TfmSpecificPackageFile Include="$(MSBuildThisFileDirectory)build\palette-v3.css"
-                              PackagePath="build\palette-v3.css" />
-    </ItemGroup>
-  </Target>
 
 </Project>
