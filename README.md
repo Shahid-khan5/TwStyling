@@ -1,6 +1,6 @@
 # Tw — Tailwind utility styling for native .NET UI
 
-Style native controls with the Tailwind vocabulary AI models (and web developers) already know:
+Style native controls with the Tailwind vocabulary that AI models — and web developers — already know:
 
 ```xml
 <ContentPage xmlns:tw="https://tw" ...>
@@ -17,19 +17,59 @@ Style native controls with the Tailwind vocabulary AI models (and web developers
 
 Or in C#: `new Label().Tw("text-xl font-bold")`.
 
-**Why:** native platforms give you real controls, accessibility, and performance a WebView can't; the Tailwind vocabulary gives you a design system plus everything AI models learned from millions of well-designed web components. This engine is the bridge — an AI-legibility layer for native UI.
+---
 
-## Projects
+## The three things this library is for
 
-| Project | What it is |
-|---|---|
-| `src/Tw.Core` | Framework-neutral engine: span-based parser, Tailwind token tables, resolver, cached `StylePlan`s. `net10.0` + `netstandard2.0`, zero UI references. |
-| `src/Tw.Maui` | MAUI adapter: `Tw.Class` attached property, per-control property mapping, VisualStateManager bridge, `dark:` via AppThemeBinding. |
-| `src/Tw.Analyzers` | Roslyn analyzer (TW0001): validates class-string literals in C# at build time using the same parser the runtime uses. |
-| `src/Tw.Generators` | Source generator (the `[GeneratedRegex]` evolution). Every literal `.Tw("...")` call in C# and every literal `tw:Tw.Class` / `Tw.ActiveClass` in XAML is parsed at build time into static `StylePlan` data, preloaded into the engine cache by a `[ModuleInitializer]`. At runtime, applying that class is a dictionary hit, not a parse. Invalid XAML classes become build **errors** (TWG001). Only genuinely dynamic strings — interpolation, bindings, and device-dependent `platform:`/`idiom:` variants — fall through to the runtime parser. C# and XAML share one preload path; there is no C#-only interceptor fast lane. Installing the `Tw.Maui` package wires this up automatically (set `<TwPrecompile>false</TwPrecompile>` to opt out). |
-| `samples/Gallery` | Demo app (Windows TFM for fast iteration) — the acceptance test: AI-idiom components pasted in unedited. |
-| `tests/Tw.Core.Tests` | Engine unit tests. |
-| `tests/Tw.Benchmarks` | BenchmarkDotNet perf contract. |
+### 1. Real Tailwind, not a lookalike
+
+Tw does not reimplement Tailwind's grammar. At build time it runs **the actual Tailwind CSS
+compiler** over your project, scanning your `.xaml` and `.cs` for class strings exactly as it would
+scan `.jsx`. The CSS it emits is lowered into native style plans.
+
+So the vocabulary is Tailwind's, not an approximation of it:
+
+```xml
+<Label tw:Tw.Class="w-[137px] text-[13px] bg-brand-600/50" />
+```
+
+Arbitrary values, opacity modifiers, `@theme` design tokens, `@utility`, `@custom-variant` — they
+work because Tailwind itself resolves them. When Tailwind ships a new utility, you get it by bumping
+the CLI version, not by waiting for us to reimplement it.
+
+### 2. Native controls, and nothing at runtime
+
+No WebView. No CSS engine on the device. No runtime parsing. A `Label` styled with `text-xl
+font-bold` is an ordinary `Label` with `FontSize` and `FontAttributes` set — real platform
+accessibility, real controls, native performance.
+
+Everything cold happens during `dotnet build`:
+
+```
+tw.css ──(Tailwind CLI)──▶ CSS ──(Tw.Css)──▶ StylePlan ──(codegen)──▶ static data
+                                                                          │
+                                       runtime: dictionary hit ◀──────────┘
+                                                    │
+                                          SetValue on the control
+```
+
+Applying a class is a dictionary lookup and a loop of `SetValue`. Nothing is parsed, nothing is
+reflected — trimming- and AOT-safe.
+
+### 3. AI-legible native UI
+
+This is the point of the whole exercise. Models write beautiful Tailwind and mediocre XAML, because
+the training data is overwhelmingly web. Tw lets a model emit what it is good at and renders it
+natively. The acceptance test for this repo is literally: *paste an AI-generated component in
+unedited, and it looks right.*
+
+Unknown or web-only utilities are never silent no-ops — they fail at build time, with a hint:
+
+```
+error TWG001: 'float-left': 'float' has no native analog — use layout containers
+```
+
+---
 
 ## Setup
 
@@ -37,55 +77,61 @@ Or in C#: `new Label().Tw("text-xl font-bold")`.
 dotnet add package TwStyling.Maui
 ```
 
-That's the whole install. The package brings in `TwStyling`, registers the analyzer and the
-source generator, and feeds your `.xaml` files to the generator so `tw:Tw.Class` literals are
-precompiled. Set `<TwPrecompile>false</TwPrecompile>` to turn precompilation off and parse
-classes at runtime instead; the analyzer keeps validating either way.
+Add a `tw.css` next to your `.csproj`:
 
-The package IDs are `TwStyling.Maui` and `TwStyling`; the assemblies and namespaces are `Tw.Maui`
-and `Tw.Core`. They differ because nuget.org reserves the short `Tw.` prefix. Your `using`
-statements are unaffected. `TwStyling` carries no MAUI dependency and is usable on its own.
+```css
+@import "tailwindcss";
 
-```csharp
-// MauiProgram.cs — optional; the engine self-initializes, this picks diagnostics behavior
-builder.UseTw(o => o.DiagnosticMode = TwDiagnosticMode.Throw); // Throw in Debug/CI, DebugOutput in prod
+/* Native variants. Tailwind passes an unknown media type through verbatim,
+   and Tw resolves it at build time for the platform head being compiled. */
+@custom-variant windows (@media windows);
+@custom-variant android (@media android);
+@custom-variant ios (@media ios);
+@custom-variant phone (@media phone);
+@custom-variant tablet (@media tablet);
+@custom-variant desktop (@media desktop);
+@custom-variant pressed (&:active);
+
+@source "./**/*.xaml";
+@source "./**/*.cs";
 ```
 
-XAML namespace: `xmlns:tw="https://tw"` (or `clr-namespace:Tw.Maui;assembly=Tw.Maui`).
+That is the whole install. On first build the standalone Tailwind CLI (a Node-free binary) is fetched
+once into your NuGet cache; set `<TailwindCliPath>` to your own copy for offline or CI builds.
 
-## Supported utilities (~85% of AI-emitted Tailwind, usage-weighted)
+Without a `tw.css`, Tw falls back to its built-in class-name parser and everything still works — you
+just lose arbitrary values, custom tokens, and plugins.
 
-| Area | Utilities |
-|---|---|
-| Color | `bg-*` `text-*` `border-*` — full Tailwind palette, `white/black/transparent`, opacity `bg-black/50`, arbitrary `bg-[#rrggbb]` |
-| Gradients | `bg-gradient-to-{t,tr,r,br,b,bl,l,tl}` + `from-*` `via-*` `to-*` |
-| Spacing | `p/px/py/pt/pr/pb/pl-*`, `m*-*` (negatives ok), `m/mx/my/ml/mr/mt/mb-auto` (→ alignment), `gap-*` `gap-x/y-*`, values: scale, `px`, `2.5`, `[13px]` |
-| Typography | `text-xs…9xl`, `font-thin…black`, `italic`, `tracking-*`, `leading-*`, `line-clamp-N`, `truncate`, `underline`/`line-through`, `uppercase`/`lowercase`, `text-left/center/right/justify` |
-| Shape | `rounded(-none/sm/md/lg/xl/2xl/3xl/full)`, per-side `rounded-t-lg`, `border`, `border-0/2/4/8` |
-| Effects | `shadow(-sm/md/lg/xl/2xl/none)`, `opacity-0…100` |
-| Sizing | `w/h-*`, `size-*`, `w-full`, `min/max-w/h-*`, named `max-w-sm…7xl` |
-| Flexbox | `flex`, `flex-row/col(-reverse)`, `flex-wrap/nowrap`, `flex-1/auto/initial/none`, `justify-*`, `items-*`, `self-*`, `grow(-N)`, `shrink(-N)`, `basis-{N,auto,full,1/2}` (on `FlexLayout` / children) |
-| Grid | `grid-cols-N`, `grid-rows-N` (star tracks), `col/row-span-N`, `col/row-start-N` (on `Grid` / children) |
-| Transforms | `rotate-*`, `scale-*`, `translate-x/y-*`, `z-*` |
-| Transitions | `transition(-colors/opacity/transform/all/none)`, `duration-N`, `delay-N`, `ease-*` — animates class changes, theme flips, breakpoint crossings, AND interactive states (with transition-*, pressed/hover/focus tween instead of snapping); `transition-all` also tweens font size |
-| Animations | `animate-spin`, `animate-pulse`, `animate-bounce`, `animate-none` — engine-managed loops |
-| Visibility | `hidden`, `visible`, `invisible`, `overflow-hidden/visible` |
+XAML namespace: `xmlns:tw="https://tw"`.
 
-**Variants** (stackable, e.g. `md:dark:bg-indigo-400`):
+```csharp
+// MauiProgram.cs — optional; picks how problems surface
+builder.UseTw(o => o.DiagnosticMode = TwDiagnosticMode.Throw);  // Throw in CI, DebugOutput in prod
+```
+
+---
+
+## What you get
+
+**Utilities.** Color (full palette, `bg-black/50`, `bg-[#hex]`), gradients, spacing, typography,
+shape, shadows, sizing, flexbox, grid, transforms, transitions, animations, visibility — about 95% of
+what Tailwind expresses that a native toolkit *can* express. [COVERAGE.md](COVERAGE.md) has the
+honest accounting, including what is web-only and why.
+
+**Variants**, stackable (`md:dark:bg-indigo-400`):
 
 | Class | Prefixes | Cost |
 |---|---|---|
-| Platform | `android:` `ios:` `mac:` `windows:` `tizen:` `mobile:` | zero — filtered at plan compile |
-| Idiom | `phone:` `tablet:` `desktop:` `tv:` `watch:` | zero — filtered at plan compile |
-| Theme | `dark:` `light:` | AppThemeBinding on differing properties only |
-| Interactive | `pressed:`/`active:` `hover:` `focus:` `disabled:` | VisualStateManager, built only when present |
-| Responsive | `sm:` `md:` `lg:` `xl:` `2xl:` (window width 640/768/1024/1280/1536) | overlay entries + window-size tier tracking |
+| Platform | `android:` `ios:` `mac:` `windows:` | **zero** — compiled out per build head |
+| Idiom | `phone:` `tablet:` `desktop:` | runtime (one iOS head serves iPhone *and* iPad) |
+| Theme | `dark:` `light:` | `AppThemeBinding`, on differing properties only |
+| Interactive | `pressed:` `hover:` `focus:` `disabled:` | native events → state vector → reconcile |
+| Responsive | `sm:` `md:` `lg:` `xl:` `2xl:` | overlay entries + window-width tracking |
 
-Deliberate deviations from web Tailwind: `pressed:` is first-class (touch-first); `hover:` maps to PointerOver; auto margins become `LayoutOptions`. Not yet supported (loud diagnostic, never a silent no-op): `divide-*`/`space-*`/`ring-*`, `group-*`/`peer-*`, fractional widths, font families, breakpoints combined with interactive variants.
+`pressed:` is first-class (touch-first) and `hover:` maps to PointerOver — deliberate deviations from
+web Tailwind.
 
-## Binding-driven styling
-
-Different font size / colors / anything based on a view-model boolean — with animation:
+**Binding-driven styling**, with animation:
 
 ```xml
 <Label tw:Tw.Class="transition-all duration-300 text-sm text-slate-500"
@@ -93,72 +139,51 @@ Different font size / colors / anything based on a view-model boolean — with a
        tw:Tw.IsActive="{Binding IsImportant}" />
 ```
 
-`ActiveClass` utilities are appended (last-wins, like Tailwind) while `IsActive` is true. Both compositions are cached plans, so toggling is two dictionary lookups — and with `transition-*` in the base classes the switch animates.
+`ActiveClass` is appended last-wins while `IsActive` holds. Both compositions are cached plans, so
+toggling is two dictionary lookups — and `transition-*` in the base classes makes the switch animate
+instead of snap.
 
-## Performance model
+**Measured** (`tests/Tw.Benchmarks`, plus a 1000-cell `CollectionView` and a leak probe in the
+Gallery): plan cache hit **~53 ns / 0 B**. A full restyle of a live element is ~22 µs and **184 B** —
+the time is MAUI's `SetValue` floor, not ours. Leak probe: 0 survivors across 4 scenarios.
 
-Class strings are static in practice, so everything is *compute once per unique string, share across all elements*:
+---
 
-```
-"bg-indigo-600 rounded-lg px-4"      (once per unique string)
-  → span tokenizer → static token tables → StylePlan (immutable, platform-filtered)
-  → lowered per control type to (BindableProperty, boxed value) pairs   (once per (string, type))
-  → per element: a for-loop of SetValue                                  (the hot path)
-```
+## Project layout
 
-Measured (see `tests/Tw.Benchmarks`): **cache hit ~53 ns, 0 B allocated**; cold compile of a 10-utility string **~4 µs**. No reflection anywhere — trimming/AOT safe.
+| Project | What it is |
+|---|---|
+| `src/Tw.Css` | CSS component-value parser and evaluator: `var()`, `calc()` with unit algebra, CSS Color 4 (`oklch`, `color-mix`). No UI dependency. |
+| `src/Tw.Core` | Framework-neutral engine: CSS → `StylePlan` lowering, token tables, plan cache. `net10.0` + `netstandard2.0`. |
+| `src/Tw.Maui` | MAUI adapter: `Tw.Class`, per-control property mapping, state reconciler, theme swap. |
+| `src/Tw.Analyzers` | Roslyn analyzer (TW0001) — validates class strings in C#. |
+| `src/Tw.Generators` | Source generator — lowers the Tailwind CLI's CSS into preloaded plans at build time. |
+| `samples/Gallery` | Demo, acceptance test, and the stress / leak / perf harness. |
 
-## Build-time validation
+Packages: **`TwStyling.Maui`** (adapter) and **`TwStyling`** (engine, no MAUI dependency). The
+assemblies and namespaces are `Tw.Maui` / `Tw.Core`; the package IDs differ only because nuget.org
+reserves the short `Tw.` prefix.
 
-Reference `Tw.Analyzers` as an analyzer and typos become build warnings with fix hints:
+---
 
-```
-warning TW0001: 'bg-nope-500': unknown color 'nope-500'
-warning TW0001: 'sr-only': 'sr-only' has no native equivalent — use SemanticProperties instead
-```
+## Status
 
-Covers C# literals today; XAML validation via build task is planned. At runtime the same diagnostics flow to `TwRuntime.DiagnosticSink` / `DiagnosticMode`.
+**Preview — not production ready.** The architecture is settled and the engine is well covered (269
+tests, live-verified on WinUI), but the CSS pipeline is new. Before shipping, know:
 
-## Regenerating the palette
-
-`src/Tw.Core/Generated/TwPalette.g.cs` is generated from the official Tailwind source:
-
-```powershell
-./tools/gen-palette.ps1 -InputFile tools/colors-v3.4.17.js -OutputFile src/Tw.Core/Generated/TwPalette.g.cs
-```
-
-## Releasing
-
-Two packages ship: `TwStyling` (framework-agnostic engine) and `TwStyling.Maui` (MAUI adapter,
-carrying the analyzer and generator as analyzer assets). The sample, tests, and benchmarks are
-not packable.
-
-Version lives in `Directory.Build.props`. To publish, push a `v`-prefixed tag — the Release workflow
-derives the version from it, packs, and pushes `TwStyling` before `TwStyling.Maui`. You can also run it
-from the Actions tab with an explicit version.
-
-```bash
-git tag v0.1.0-preview.1
-git push origin v0.1.0-preview.1
-```
-
-No secrets required: publishing uses nuget.org [Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing),
-which exchanges a GitHub OIDC token for a one-hour API key. The policy on nuget.org must match this
-repo exactly — owner `Shahid-khan5`, repo `Tw.Maui`, workflow `release.yml`, environment blank. If
-you ever add an `environment:` to the release job, set the same value on the policy or the exchange
-is rejected.
-
-To verify a package locally before tagging:
-
-```bash
-dotnet pack Tw.slnx -c Release -o artifacts
-```
-
-Package IDs are permanent and published versions are immutable — they can only be unlisted, never
-replaced. Ship preview versions until the surface settles.
+- **Two palettes.** Literal class strings compile through Tailwind v4; interpolated ones
+  (`$"bg-{family}-{shade}"`) still fall through to the legacy parser and its **v3** color tables. An
+  app can render both. Fix in progress.
+- **Colors shift.** Adopting real v4 changes rendered colors — `bg-blue-500` moves `#3B82F6` →
+  `#2B7FFF`. Correct, but visible.
+- **Heads exercised:** Windows and Android. iOS/macOS build but are unverified end to end.
+- Grid `col-end-*` / `row-end-*` are not lowered yet.
 
 ## Roadmap
 
-- **v1**: FlexLayout mapping (`flex`, `items-*`, `justify-*`), `transition-*`/`duration-*` animations, XAML build-time validation, responsive `md:`/`lg:`, theme customization (`tailwind.config`-style JSON)
-- **v1.5**: WPF adapter (`Tw.Wpf`) — doubles as the audit of the adapter abstraction
-- **Later**: docs/Claude-skill generation from the token tables (single source of truth), higher-level component library built on the engine
+- **v1**: one palette everywhere (retire the legacy parser), then a WPF adapter — which doubles as
+  the audit of whether the adapter abstraction is real.
+- **Later**: a component library on the engine; docs and the Claude skill generated from the same
+  tables.
+
+MIT.

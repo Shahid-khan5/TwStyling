@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* A design token the engine has never heard of. Tailwind resolves it; we lower it. */
+@theme {
+  --color-brand-600: oklch(0.55 0.2 260);
+}
+
 /* Native platform + idiom variants. Tailwind passes an unrecognized media type through
    verbatim; the plan compiler resolves it at build time and filters per build head. */
 @custom-variant windows (@media windows);

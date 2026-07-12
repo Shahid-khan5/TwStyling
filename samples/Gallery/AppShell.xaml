@@ -11,6 +11,7 @@
 
     <ShellContent Title="Components" ContentTemplate="{DataTemplate local:MainPage}" Route="Components" />
     <ShellContent Title="Colors" ContentTemplate="{DataTemplate pages:ColorsPage}" Route="Colors" />
+    <ShellContent Title="Tailwind CSS" ContentTemplate="{DataTemplate pages:TailwindCssPage}" Route="TailwindCss" />
     <ShellContent Title="Typography" ContentTemplate="{DataTemplate pages:TypographyPage}" Route="Typography" />
     <ShellContent Title="Spacing" ContentTemplate="{DataTemplate pages:SpacingPage}" Route="Spacing" />
     <ShellContent Title="Utilities" ContentTemplate="{DataTemplate pages:UtilitiesPage}" Route="Utilities" />
