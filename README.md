@@ -2,6 +2,7 @@
 
 [![NuGet: TwStyling.Maui](https://img.shields.io/nuget/vpre/TwStyling.Maui?label=TwStyling.Maui)](https://www.nuget.org/packages/TwStyling.Maui)
 [![NuGet: TwStyling](https://img.shields.io/nuget/vpre/TwStyling?label=TwStyling)](https://www.nuget.org/packages/TwStyling)
+[![Agent Skill](https://img.shields.io/badge/agent%20skill-npx%20skills%20add%20twstyling-8A5CF6)](https://github.com/Shahid-khan5/twstyling-skills)
 
 Style native .NET MAUI controls with Tailwind classes:
 
@@ -35,9 +36,29 @@ because Tailwind resolves them, not us:
 
 When Tailwind ships a new utility, you get it by bumping the CLI version.
 
-The reason to want any of this: models write excellent Tailwind and mediocre XAML, because their
-training data is overwhelmingly web. TwStyling lets a model emit what it is good at and renders it
-natively.
+---
+
+## Built for AI-written UI
+
+This is the point of the whole exercise. Models write excellent Tailwind and mediocre XAML, because
+their training data is overwhelmingly web. TwStyling lets a model emit what it is already good at,
+and renders it as native controls. The acceptance test for this project is literally: *paste an
+AI-generated component in unedited, and it looks right.*
+
+There is an **agent skill** that teaches your coding agent this library — the utilities and the MAUI
+properties they land on, the variant prefixes, the deliberate deviations from web Tailwind, and the
+utilities with no native equivalent (and what to use instead):
+
+```bash
+npx skills add shahid-khan5/twstyling-skills
+```
+
+Nothing an agent gets wrong stays quiet, either. An unknown or web-only utility fails the build with
+a hint rather than silently doing nothing:
+
+```
+error TWG001: 'float-left': 'float' has no native analog — use layout containers
+```
 
 ---
 
@@ -114,13 +135,6 @@ web Tailwind.
 
 `ActiveClass` is appended last-wins while `IsActive` holds, and `transition-*` in the base classes
 makes the switch animate instead of snap.
-
-**Nothing is ever a silent no-op.** A utility that cannot be rendered natively fails your build, and
-tells you what to do instead:
-
-```
-error TWG001: 'float-left': 'float' has no native analog — use layout containers
-```
 
 ---
 
