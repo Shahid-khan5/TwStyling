@@ -1,4 +1,7 @@
-# Tw — Tailwind utility styling for native .NET UI
+# TwStyling — Tailwind utility styling for native .NET UI
+
+[![NuGet: TwStyling.Maui](https://img.shields.io/nuget/vpre/TwStyling.Maui?label=TwStyling.Maui)](https://www.nuget.org/packages/TwStyling.Maui)
+[![NuGet: TwStyling](https://img.shields.io/nuget/vpre/TwStyling?label=TwStyling)](https://www.nuget.org/packages/TwStyling)
 
 Style native controls with the Tailwind vocabulary that AI models — and web developers — already know:
 
@@ -71,11 +74,16 @@ error TWG001: 'float-left': 'float' has no native analog — use layout containe
 
 ---
 
-## Setup
+## Install
 
-```
-dotnet add package TwStyling.Maui
-```
+Two packages are published on [nuget.org](https://www.nuget.org/packages/TwStyling.Maui):
+
+| Package | Install | Use when |
+|---|---|---|
+| [`TwStyling.Maui`](https://www.nuget.org/packages/TwStyling.Maui) | `dotnet add package TwStyling.Maui --prerelease` | You're building a MAUI app — this is the one you want. |
+| [`TwStyling`](https://www.nuget.org/packages/TwStyling) | `dotnet add package TwStyling --prerelease` | You only want the framework-neutral engine (parser, token tables, `StylePlan` cache) with no MAUI dependency. |
+
+(`--prerelease` is needed while versions are `0.1.0-preview.*`.)
 
 Add a `tw.css` next to your `.csproj`:
 
