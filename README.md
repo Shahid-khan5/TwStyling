@@ -81,9 +81,9 @@ Two packages are published on [nuget.org](https://www.nuget.org/packages/TwStyli
 | Package | Install | Use when |
 |---|---|---|
 | [`TwStyling.Maui`](https://www.nuget.org/packages/TwStyling.Maui) | `dotnet add package TwStyling.Maui --prerelease` | You're building a MAUI app — this is the one you want. |
-| [`TwStyling`](https://www.nuget.org/packages/TwStyling) | `dotnet add package TwStyling --prerelease` | You only want the framework-neutral engine (parser, token tables, `StylePlan` cache) with no MAUI dependency. |
+| [`TwStyling`](https://www.nuget.org/packages/TwStyling) | `dotnet add package TwStyling --prerelease` | You only want the framework-neutral engine (CSS lowering, value evaluator, `StylePlan` cache) with no MAUI dependency. |
 
-(`--prerelease` is needed while versions are `0.1.0-preview.*`.)
+(`--prerelease` is needed while the version is a release candidate — see [Status](#status).)
 
 Add a `tw.css` next to your `.csproj`:
 

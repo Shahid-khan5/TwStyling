@@ -20,7 +20,11 @@ jobs:
   publish:
     runs-on: windows-latest
 
-    # OIDC claims have to match exactly or the token exchange is rejected.
+    # Publishing uses nuget.org Trusted Publishing (OIDC), not a stored API key. The claims have to
+    # match the policy on nuget.org exactly or the token exchange is rejected, so the policy must
+    # name: owner Shahid-khan5 / repo TwStyling / workflow release.yml / environment (blank).
+    # Note the repo is TwStyling, not TwStyling.Maui — a policy still naming the old repo will fail
+    # at the "NuGet login" step. Do NOT add `environment:` here without also setting it on the policy.
     permissions:
       id-token: write   # lets GitHub mint the OIDC token nuget.org validates
       contents: read
