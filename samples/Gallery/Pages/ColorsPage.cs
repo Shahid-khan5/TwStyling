@@ -1,4 +1,4 @@
-using Tw.Maui;
+using TwStyling.Maui;
 using static Gallery.Pages.GalleryUi;
 
 namespace Gallery.Pages;
@@ -25,7 +25,12 @@ public class ColorsPage : ContentPage
         var rows = new List<View>
         {
             Section("Color palette"),
-            Caption("bg-{family}-{shade} — all 242 entries, hex-identical to Tailwind v3.4.17"),
+            // These swatches are built from interpolated strings, which the generator cannot
+            // precompile — so they resolve through the legacy parser and still show the v3 hexes.
+            // Literal class strings elsewhere in the app now come from Tailwind v4 via the CSS
+            // pipeline, where the palette is defined in oklch (bg-blue-500 is #2B7FFF, not #3B82F6).
+            // The two agree again once the runtime fallback is CSS-driven.
+            Caption("bg-{family}-{shade} — all 242 entries (v3 hexes: built from interpolated strings)"),
             HeaderRow(),
         };
 

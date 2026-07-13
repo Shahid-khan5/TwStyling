@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.LifecycleEvents;
-using Tw.Maui;
+using TwStyling.Maui;
 
 namespace Gallery;
 

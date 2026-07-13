@@ -34,7 +34,7 @@ public partial class VpnDemoPage : ContentPage
 	{
 		// The active dot's ActiveClass (blue pill) animates in via transition-all.
 		for (int i = 0; i < _dots.Length; i++)
-			Tw.Maui.Tw.SetIsActive(_dots[i], i == e.CurrentPosition);
+			TwStyling.Maui.Tw.SetIsActive(_dots[i], i == e.CurrentPosition);
 	}
 }
 

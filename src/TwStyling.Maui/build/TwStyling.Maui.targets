@@ -1,0 +1,204 @@
+<Project>
+
+  <!-- Imported after the consuming project, so its XAML globs are already known. Excluding
+       @(AdditionalFiles) keeps this a no-op if the consumer added them by hand. -->
+  <ItemGroup Condition="'$(TwPrecompile)' == 'true'">
+    <AdditionalFiles Include="**\*.xaml"
+                     Exclude="@(AdditionalFiles);bin\**\*.xaml;obj\**\*.xaml"
+                     Visible="false" />
+  </ItemGroup>
+
+  <!-- TwPrecompile=false must also unload the generator, or it keeps emitting preloads.
+       The analyzer stays loaded either way: TW0001 is independent of precompilation. -->
+  <Target Name="TwRemoveGenerator" BeforeTargets="CoreCompile" Condition="'$(TwPrecompile)' != 'true'">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="'%(Filename)%(Extension)' == 'TwStyling.Generators.dll'" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    The CSS pipeline. The real Tailwind CLI compiles the project's entry stylesheet (scanning its
+    .xaml/.cs for class strings) and the result is handed to the generator, which lowers it into
+    StylePlans at build time. Tailwind is the only vocabulary: there is no fallback parser, so
+    turning this off (TwUseCssPipeline=false) leaves the app with no styling at all.
+  -->
+
+  <PropertyGroup>
+    <TwUseCssPipeline Condition="'$(TwUseCssPipeline)' == ''">true</TwUseCssPipeline>
+    <TwCssEntry Condition="'$(TwCssEntry)' == '' AND Exists('$(MSBuildProjectDirectory)\tw.css')">$(MSBuildProjectDirectory)\tw.css</TwCssEntry>
+
+    <!-- $(BaseIntermediateOutputPath), not $(IntermediateOutputPath): this file is imported from the
+         project body, before the SDK sets the latter, so it would evaluate to empty and write into
+         the project directory. $(TargetFramework) keeps concurrent inner builds off each other. -->
+    <TwIntermediateDir Condition="'$(TwIntermediateDir)' == ''">$(BaseIntermediateOutputPath)tw\$(TargetFramework)\</TwIntermediateDir>
+    <TwGeneratedCss Condition="'$(TwGeneratedCss)' == ''">$(TwIntermediateDir)tailwind.css</TwGeneratedCss>
+
+    <TailwindCliVersion Condition="'$(TailwindCliVersion)' == ''">v4.3.2</TailwindCliVersion>
+
+    <!-- No tw.css in the project: generate a default entry so the pipeline still runs. -->
+    <_TwDefaultEntry Condition="'$(TwCssEntry)' == ''">$(TwIntermediateDir)tw.css</_TwDefaultEntry>
+    <TwCssEntry Condition="'$(TwCssEntry)' == ''">$(_TwDefaultEntry)</TwCssEntry>
+
+    <_TwCssEnabled Condition="'$(TwUseCssPipeline)' == 'true'">true</_TwCssEnabled>
+    <_TwCssEnabled Condition="'$(_TwCssEnabled)' == ''">false</_TwCssEnabled>
+  </PropertyGroup>
+
+  <!--
+    The default entry stylesheet, used when the project has no tw.css of its own. Writing a tw.css
+    overrides it entirely. @source paths are relative to this file (in obj), hence the walk back up.
+  -->
+  <Target Name="TwWriteDefaultEntry"
+          Condition="'$(_TwCssEnabled)' == 'true' AND '$(_TwDefaultEntry)' != ''">
+
+    <MakeDir Directories="$(TwIntermediateDir)" />
+
+    <PropertyGroup>
+      <_TwProjectFromEntry>$([MSBuild]::MakeRelative($(TwIntermediateDir), $(MSBuildProjectDirectory)).Replace('\','/'))</_TwProjectFromEntry>
+    </PropertyGroup>
+
+    <!-- An item's Include is not a string literal: ';' separates items and '*' globs against the
+         filesystem. Both appear in CSS, so they must be escaped (%3B, %2A) or the @source lines
+         silently expand to nothing. -->
+    <ItemGroup>
+      <_TwDefaultEntryLine Include="@import &quot;tailwindcss&quot;%3B" />
+      <_TwDefaultEntryLine Include="/%2A Native variants. Tailwind passes an unknown media type through verbatim, and the" />
+      <_TwDefaultEntryLine Include="   engine resolves it at build time for the platform head being compiled. %2A/" />
+      <_TwDefaultEntryLine Include="@custom-variant windows (@media windows)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant android (@media android)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant ios (@media ios)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant mac (@media mac)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant phone (@media phone)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant tablet (@media tablet)%3B" />
+      <_TwDefaultEntryLine Include="@custom-variant desktop (@media desktop)%3B" />
+      <_TwDefaultEntryLine Include="/%2A MAUI has no CSS :hover/:active on elements. These map to the engine's state vector. %2A/" />
+      <_TwDefaultEntryLine Include="@custom-variant pressed (&amp;:active)%3B" />
+      <_TwDefaultEntryLine Include="@source &quot;$(_TwProjectFromEntry)/%2A%2A/%2A.xaml&quot;%3B" />
+      <_TwDefaultEntryLine Include="@source &quot;$(_TwProjectFromEntry)/%2A%2A/%2A.cs&quot;%3B" />
+      <_TwDefaultEntryLine Include="@source not &quot;$(_TwProjectFromEntry)/obj/%2A%2A&quot;%3B" />
+      <_TwDefaultEntryLine Include="@source not &quot;$(_TwProjectFromEntry)/bin/%2A%2A&quot;%3B" />
+    </ItemGroup>
+
+    <WriteLinesToFile File="$(_TwDefaultEntry)" Lines="@(_TwDefaultEntryLine)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+
+  <!--
+    The standalone CLI is a Node-free binary, cached in the NuGet global-packages folder so it is
+    fetched once per machine. Set $(TailwindCliPath) to a binary you manage yourself — required for
+    offline builds, and the recommended setup for CI.
+  -->
+  <PropertyGroup Condition="'$(_TwCssEnabled)' == 'true'">
+    <!-- Set before the asset table below fills TailwindCliPath in, so the two failure modes stay
+         distinguishable: "you pointed me at a binary that isn't there" vs "I have none for this OS". -->
+    <_TwCliUserSupplied Condition="'$(TailwindCliPath)' != ''">true</_TwCliUserSupplied>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(_TwCssEnabled)' == 'true' AND '$(_TwCliUserSupplied)' != 'true'">
+    <_TwCliArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</_TwCliArch>
+
+    <_TwCliAsset Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(_TwCliArch)' == 'Arm64'">tailwindcss-windows-arm64.exe</_TwCliAsset>
+    <_TwCliAsset Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(_TwCliAsset)' == ''">tailwindcss-windows-x64.exe</_TwCliAsset>
+    <_TwCliAsset Condition="$([MSBuild]::IsOSPlatform('Linux')) AND '$(_TwCliArch)' == 'Arm64'">tailwindcss-linux-arm64</_TwCliAsset>
+    <_TwCliAsset Condition="$([MSBuild]::IsOSPlatform('Linux')) AND '$(_TwCliAsset)' == ''">tailwindcss-linux-x64</_TwCliAsset>
+    <_TwCliAsset Condition="$([MSBuild]::IsOSPlatform('OSX')) AND '$(_TwCliArch)' == 'Arm64'">tailwindcss-macos-arm64</_TwCliAsset>
+    <_TwCliAsset Condition="$([MSBuild]::IsOSPlatform('OSX')) AND '$(_TwCliAsset)' == ''">tailwindcss-macos-x64</_TwCliAsset>
+
+    <_TwCliCacheDir Condition="'$(NuGetPackageRoot)' != ''">$(NuGetPackageRoot)tailwindcss-cli\$(TailwindCliVersion)\</_TwCliCacheDir>
+    <_TwCliCacheDir Condition="'$(NuGetPackageRoot)' == ''">$(TwIntermediateDir)cli\</_TwCliCacheDir>
+
+    <TailwindCliPath Condition="'$(_TwCliAsset)' != ''">$(_TwCliCacheDir)$(_TwCliAsset)</TailwindCliPath>
+    <_TwCliUrl>https://github.com/tailwindlabs/tailwindcss/releases/download/$(TailwindCliVersion)/$(_TwCliAsset)</_TwCliUrl>
+
+    <!-- Downloaded under a name unique to this inner build, then moved into place. The cache dir is
+         shared and the inner builds of a multi-targeted project run in parallel — pointing them all
+         at the same destination races, and a half-written 110 MB binary fails to exec. -->
+    <_TwCliStagingName>$(_TwCliAsset).$(MSBuildProjectName)-$(TargetFramework).part</_TwCliStagingName>
+  </PropertyGroup>
+
+  <Target Name="TwRestoreCli" Condition="'$(_TwCssEnabled)' == 'true' AND !Exists('$(TailwindCliPath)')">
+
+    <Error Condition="'$(_TwCliUserSupplied)' == 'true'" Code="TW1001"
+           Text="Tw: &lt;TailwindCliPath&gt; is set to '$(TailwindCliPath)', but there is no file there." />
+
+    <Error Condition="'$(_TwCliAsset)' == ''" Code="TW1002"
+           Text="Tw: no standalone Tailwind CLI is published for this OS/architecture ($(_TwCliArch)). Install one yourself and set &lt;TailwindCliPath&gt;." />
+
+    <Message Importance="high" Text="Tw: downloading the Tailwind CLI $(TailwindCliVersion) (one time, ~110 MB) → $(TailwindCliPath)" />
+
+    <DownloadFile SourceUrl="$(_TwCliUrl)"
+                  DestinationFolder="$(_TwCliCacheDir)"
+                  DestinationFileName="$(_TwCliStagingName)"
+                  Retries="3" />
+
+    <!-- A parallel inner build may have published it already; either copy is the same binary. -->
+    <Move SourceFiles="$(_TwCliCacheDir)$(_TwCliStagingName)" DestinationFiles="$(TailwindCliPath)"
+          Condition="!Exists('$(TailwindCliPath)')" ContinueOnError="true" />
+    <Delete Files="$(_TwCliCacheDir)$(_TwCliStagingName)" ContinueOnError="true" />
+
+    <Error Condition="!Exists('$(TailwindCliPath)')" Code="TW1003"
+           Text="Tw: the Tailwind CLI download did not produce $(TailwindCliPath)." />
+
+    <!-- The GitHub release asset carries no execute bit on Unix. -->
+    <Exec Condition="!$([MSBuild]::IsOSPlatform('Windows'))"
+          Command="chmod +x &quot;$(TailwindCliPath)&quot;"
+          StandardOutputImportance="low" />
+  </Target>
+
+  <!--
+    The generator identifies the compiled stylesheet by $(TwGeneratedCss), not by filename or item
+    metadata. Both alternatives are traps: the MAUI SDK globs *.css as MauiCss and pushes the
+    project's *entry* stylesheet into AdditionalFiles on its own (that one has no rules, so loading
+    it makes every utility look unknown), and metadata added from a target does not reliably reach
+    the generator's .editorconfig. A compiler-visible property is unambiguous.
+  -->
+  <ItemGroup Condition="'$(_TwCssEnabled)' == 'true'">
+    <CompilerVisibleProperty Include="TwGeneratedCss" />
+  </ItemGroup>
+
+  <!-- Inputs/Outputs: Tailwind re-runs only when the entry stylesheet or a file that could carry a
+       class string changed. Tailwind's scanner decides which candidates exist; MSBuild only decides
+       whether to ask it again. -->
+  <Target Name="TwBuildCss"
+          DependsOnTargets="TwWriteDefaultEntry;TwRestoreCli"
+          BeforeTargets="CoreCompile"
+          Condition="'$(_TwCssEnabled)' == 'true'"
+          Inputs="$(TwCssEntry);@(Compile);@(MauiXaml)"
+          Outputs="$(TwGeneratedCss)">
+
+    <MakeDir Directories="$(TwIntermediateDir)" />
+    <Message Importance="normal" Text="Tw: compiling $(TwCssEntry) → $(TwGeneratedCss)" />
+
+    <Exec Command="&quot;$(TailwindCliPath)&quot; --input &quot;$(TwCssEntry)&quot; --output &quot;$(TwGeneratedCss)&quot; --cwd &quot;$(MSBuildProjectDirectory)&quot;"
+          StandardOutputImportance="low"
+          StandardErrorImportance="normal" />
+  </Target>
+
+  <!--
+    Separate from TwBuildCss, and unconditional beyond the pipeline being on. MSBuild skips an
+    up-to-date target's tasks entirely, but an incremental build must still hand the (unchanged) CSS
+    to the generator. Conditioning this on the file existing would also deadlock a clean build:
+    target conditions are evaluated before TwBuildCss has produced it, and a target skipped that way
+    never runs its dependencies.
+
+    It must run before GenerateMSBuildEditorConfigFile (note the File suffix — the real target name
+    in Microsoft.Managed.Core.targets), which is what transports the property to the generator.
+  -->
+  <Target Name="TwAddCssToCompiler"
+          DependsOnTargets="TwBuildCss"
+          BeforeTargets="GenerateMSBuildEditorConfigFile;CoreCompile"
+          Condition="'$(_TwCssEnabled)' == 'true'">
+    <ItemGroup>
+      <AdditionalFiles Include="$(TwGeneratedCss)" TwGeneratedCss="true" Visible="false" />
+
+      <!-- Embed the same stylesheet the generator used, so class strings that cannot be precompiled
+           (interpolated strings, idiom: variants that depend on the running device) resolve against
+           the same vocabulary at runtime. TwEmbedStylesheet=false drops it (~40 KB) — only safe if
+           every class string in the app is a literal, since nothing else can resolve one. -->
+      <EmbeddedResource Include="$(TwGeneratedCss)"
+                        Condition="'$(TwEmbedStylesheet)' != 'false'"
+                        LogicalName="Tw.tailwind.css"
+                        Visible="false" />
+    </ItemGroup>
+  </Target>
+
+</Project>

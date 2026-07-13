@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!-- Lets Visual Studio recognize (and debug) this as a source generator -->
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <NoWarn>$(NoWarn);RS2008</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" PrivateAssets="all" />
+    <!-- Explicit: the compiled-in span code needs it; don't rely on Roslyn's transitive copy. -->
+    <PackageReference Include="System.Memory" Version="4.6.0" PrivateAssets="all" />
+    <!-- The generator runs the real engine inside csc, so a build-time plan is identical to a
+         runtime one by construction rather than by agreement. -->
+    <Compile Include="..\TwStyling\**\*.cs" Exclude="..\TwStyling\bin\**;..\TwStyling\obj\**" LinkBase="Core" />
+    <Compile Include="..\TwStyling.Css\**\*.cs" Exclude="..\TwStyling.Css\bin\**;..\TwStyling.Css\obj\**" LinkBase="Css" />
+  </ItemGroup>
+
+</Project>

@@ -4,9 +4,8 @@
     <!-- Opt in per-project; keeps tests, benchmarks and the Gallery sample out of the feed -->
     <IsPackable>false</IsPackable>
 
-    <!-- 0.1.0-preview.1 shipped as TwMaui / TwMaui.Core; both IDs are retired and unlisted.
-         Published versions are immutable, so the rename lands in preview.2. -->
-    <Version>0.1.0-preview.2</Version>
+    <!-- rc, not final: iOS and Android are verified by build and by generated plans, but not yet RUN. -->
+    <Version>1.0.0-rc.1</Version>
     <Authors>Shahid Khan</Authors>
     <Company>Shahid Khan</Company>
     <Copyright>Copyright (c) 2026 Shahid Khan</Copyright>
@@ -19,7 +18,6 @@
     <PackageIcon>icon.png</PackageIcon>
     <PackageTags>maui;tailwind;css;styling;ui;utility-classes;dotnet;xaml</PackageTags>
 
-    <!-- Symbols + SourceLink. The .NET SDK bundles SourceLink, so no PackageReference is needed. -->
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>

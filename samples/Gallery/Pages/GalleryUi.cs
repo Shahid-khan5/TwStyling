@@ -1,4 +1,4 @@
-using Tw.Maui;
+using TwStyling.Maui;
 
 namespace Gallery.Pages;
 

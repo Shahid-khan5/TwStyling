@@ -9,3 +9,11 @@ artifacts/
 
 # Nested skills repo (published separately)
 /skills/
+
+# The standalone Tailwind CLI (~112 MB per platform). Restored on first build by
+# tools/tailwind/Tailwind.targets; override with $(TailwindCliPath) for offline/CI.
+/tools/tailwind/*.exe
+/tools/tailwind/tailwindcss-*
+
+# Reference clone of uniwind (Tailwind bindings for React Native) — has its own .git
+/uniwind/

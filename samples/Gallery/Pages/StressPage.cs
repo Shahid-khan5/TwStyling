@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Tw.Maui;
+using TwStyling.Maui;
 
 namespace Gallery.Pages;
 
@@ -47,7 +47,7 @@ public sealed class StressPage : ContentPage
     private static View BuildCell()
     {
         var dot = new BoxView { WidthRequest = 12, HeightRequest = 12 };
-        dot.SetBinding(global::Tw.Maui.Tw.ClassProperty, static (Cell c) => c.DotClass);
+        dot.SetBinding(global::TwStyling.Maui.Tw.ClassProperty, static (Cell c) => c.DotClass);
 
         var title = new Label().Tw("text-sm font-semibold text-slate-900 dark:text-white");
         title.SetBinding(Label.TextProperty, static (Cell c) => c.Title);

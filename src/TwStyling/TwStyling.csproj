@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0 so the analyzer and generator, which run inside the compiler, can compile the same engine in -->
+    <TargetFrameworks>net10.0;netstandard2.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>TwStyling</RootNamespace>
+    <IsAotCompatible Condition="'$(TargetFramework)' == 'net10.0'">true</IsAotCompatible>
+
+    <IsPackable>true</IsPackable>
+    <PackageId>TwStyling</PackageId>
+    <Title>TwStyling — Tailwind utility styling engine</Title>
+    <Description>Framework-neutral engine behind Tw: lowers the CSS that the Tailwind compiler emits into cached, immutable style plans a native UI toolkit can apply. Includes a CSS value evaluator (var, calc, oklch, color-mix). Zero UI dependencies. Use the TwStyling.Maui package for .NET MAUI.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Memory" Version="4.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Compiled in, not referenced: the CSS AST is an implementation detail, not API to support. -->
+    <Compile Include="..\TwStyling.Css\*.cs" Exclude="..\TwStyling.Css\AssemblyInfo.cs" LinkBase="Css" />
+  </ItemGroup>
+
+</Project>
