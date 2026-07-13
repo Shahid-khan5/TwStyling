@@ -9,11 +9,8 @@
     <RootNamespace>TwStyling.Css</RootNamespace>
     <IsAotCompatible Condition="'$(TargetFramework)' == 'net10.0'">true</IsAotCompatible>
 
-    <!--
-      Not packable and not referenced: these sources are compiled directly into TwStyling (and into
-      the analyzer and generator, which must be self-contained). The project exists so the CSS
-      layer can be built and tested on its own.
-    -->
+    <!-- Not packable and not referenced: these sources are compiled directly into TwStyling (and into
+         the analyzer and generator). The project exists so the CSS layer can be tested on its own. -->
     <IsPackable>false</IsPackable>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>

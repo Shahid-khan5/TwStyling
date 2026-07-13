@@ -47,8 +47,9 @@ public sealed class TwCssPlanCompiler
         {
             if (!_byClass.TryGetValue(candidate, out var rules)) continue;
             foreach (var rule in rules)
-                if (rule.Context.Platform is { } name && IdiomOf(name) is not null)
-                    return true;
+                foreach (var media in rule.Context.MediaTypes)
+                    if (IdiomOf(media) is not null)
+                        return true;
         }
         return false;
     }
@@ -60,13 +61,23 @@ public sealed class TwCssPlanCompiler
         var diagnostics = new List<TwDiagnostic>();
         var items = new List<ParsedItem>();
         var lowered = new List<TwDeclaration>(4);
+        var restyled = new List<TwDeclaration>(4);
 
         var matched = Match(classes, env, diagnostics);
-        var scopes = BuildScopes(matched, env);
+        var properties = CustomProperties(matched);
+        var scopes = BuildScopes(properties, matched);
+
+        // Variant buckets that redefine custom properties. A base declaration that *reads* one of
+        // them computes to something else under that variant — `background-image` reads
+        // --tw-gradient-stops, which `hover:from-red-500` redefines — so it has to be lowered again
+        // in that bucket. Only a browser's cascade makes this fall out for free; here it is explicit.
+        var overrides = new List<(TwTheme, TwInteractiveState, float)>();
+        foreach (var bucket in properties.Keys)
+            if (!bucket.Equals(Base)) overrides.Add(bucket);
 
         foreach (var (candidate, rule, variants) in matched)
         {
-            var scope = scopes[BucketOf(variants)];
+            var bucket = BucketOf(variants);
 
             foreach (var declaration in rule.Declarations)
             {
@@ -74,29 +85,70 @@ public sealed class TwCssPlanCompiler
                 if (declaration.Property.StartsWith("--", StringComparison.Ordinal)) continue;
 
                 lowered.Clear();
-                CssValue value;
-                try
-                {
-                    value = CssEvaluator.Evaluate(CssValueParser.Parse(declaration.Value), scope);
-                }
-                catch (CssEvalException ex)
-                {
-                    diagnostics.Add(new TwDiagnostic(classes, candidate, $"{declaration.Property}: {ex.Message}"));
-                    continue;
-                }
-
-                if (!TwCssLowering.TryLower(declaration.Property, value, scope, lowered, out var error))
-                {
-                    diagnostics.Add(new TwDiagnostic(classes, candidate, error ?? "not supported"));
-                    continue;
-                }
+                if (!TryLower(declaration, scopes[bucket], lowered, classes, candidate, diagnostics)) continue;
 
                 foreach (var d in lowered)
                     items.Add(new ParsedItem(variants, d));
+
+                if (!bucket.Equals(Base)) continue;
+
+                foreach (var other in overrides)
+                {
+                    restyled.Clear();
+                    // A failure here is not a new problem — the same declaration already lowered
+                    // cleanly in the base scope — so it is not reported twice.
+                    if (!TryLower(declaration, scopes[other], restyled, classes, candidate, null)) continue;
+                    if (Same(lowered, restyled)) continue;
+
+                    // Keep the base rule's platform/idiom; take the variant from the bucket.
+                    var qualified = variants.With(other.Item1).With(other.Item2).WithBreakpoint(other.Item3);
+                    foreach (var d in restyled)
+                        items.Add(new ParsedItem(qualified, d));
+                }
             }
         }
 
         return StylePlanCompiler.FromItems(items, env, classes, diagnostics);
+    }
+
+    /// <summary>Evaluates and lowers one declaration. A null sink means "do not report failures".</summary>
+    private static bool TryLower(
+        CssDeclaration declaration, CssEnvironment scope, List<TwDeclaration> output,
+        string classes, string candidate, List<TwDiagnostic>? diagnostics)
+    {
+        CssValue value;
+        try
+        {
+            value = CssEvaluator.Evaluate(CssValueParser.Parse(declaration.Value), scope);
+        }
+        catch (CssEvalException ex)
+        {
+            diagnostics?.Add(new TwDiagnostic(classes, candidate, $"{declaration.Property}: {ex.Message}"));
+            return false;
+        }
+
+        if (!TwCssLowering.TryLower(declaration.Property, value, scope, output, out var error))
+        {
+            diagnostics?.Add(new TwDiagnostic(classes, candidate, error ?? "not supported"));
+            return false;
+        }
+        return true;
+    }
+
+    private static bool Same(List<TwDeclaration> a, List<TwDeclaration> b)
+    {
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+        {
+            if (a[i].Property != b[i].Property) return false;
+            var (x, y) = (a[i].Value, b[i].Value);
+            if (x.Kind != y.Kind || x.Rgba != y.Rgba) return false;
+            if (!Eq(x.X, y.X) || !Eq(x.Y, y.Y) || !Eq(x.Z, y.Z) || !Eq(x.W, y.W)) return false;
+        }
+        return true;
+
+        // NaN means "this side/corner is unset" and is a value like any other here.
+        static bool Eq(float p, float q) => p.Equals(q);
     }
 
     /// <summary>
@@ -149,11 +201,10 @@ public sealed class TwCssPlanCompiler
     /// <c>background-image</c> lives on <c>.bg-linear-to-r</c> but reads <c>--tw-gradient-from</c>,
     /// which only <c>.from-blue-500</c> declares. A per-rule scope can never see it.
     ///
-    /// Buckets keep variants honest: <c>hover:from-red-500</c> must only contribute under hover, so a
-    /// bucket's scope layers its own properties over the unqualified ones.
+    /// Buckets keep variants honest: <c>hover:from-red-500</c> must only contribute under hover.
     /// </summary>
-    private Dictionary<(TwTheme, TwInteractiveState, float), CssEnvironment> BuildScopes(
-        List<(string Candidate, CssRule Rule, TwVariantSet Variants)> matched, TwEnvironment env)
+    private static Dictionary<(TwTheme, TwInteractiveState, float), Dictionary<string, string>> CustomProperties(
+        List<(string Candidate, CssRule Rule, TwVariantSet Variants)> matched)
     {
         var properties = new Dictionary<(TwTheme, TwInteractiveState, float), Dictionary<string, string>>();
 
@@ -169,7 +220,14 @@ public sealed class TwCssPlanCompiler
                 bag[d.Property] = d.Value; // source order: later wins
             }
         }
+        return properties;
+    }
 
+    /// <summary>A variant bucket's scope layers its own custom properties over the unqualified ones.</summary>
+    private Dictionary<(TwTheme, TwInteractiveState, float), CssEnvironment> BuildScopes(
+        Dictionary<(TwTheme, TwInteractiveState, float), Dictionary<string, string>> properties,
+        List<(string Candidate, CssRule Rule, TwVariantSet Variants)> matched)
+    {
         properties.TryGetValue(Base, out var baseProperties);
         var empty = new Dictionary<string, string>(StringComparer.Ordinal);
 
@@ -221,13 +279,14 @@ public sealed class TwCssPlanCompiler
 
         variants = TwVariantSet.Default.With(theme).With(state).WithBreakpoint((float)context.MinWidth);
 
-        if (context.Platform is { } platform)
+        // Each media type is independent: `android:phone:text-sm` constrains platform AND idiom.
+        foreach (var media in context.MediaTypes)
         {
-            if (PlatformOf(platform) is { } p) variants = variants.With(p);
-            else if (IdiomOf(platform) is { } i) variants = variants.With(i);
+            if (PlatformOf(media) is { } p) variants = variants.With(p);
+            else if (IdiomOf(media) is { } i) variants = variants.With(i);
             else
             {
-                reason = $"unknown custom variant '{platform}' — declare it with @custom-variant and map it to a platform or idiom";
+                reason = $"unknown custom variant '{media}' — declare it with @custom-variant and map it to a platform or idiom";
                 return false;
             }
         }

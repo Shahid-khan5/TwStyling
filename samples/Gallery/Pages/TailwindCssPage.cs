@@ -4,9 +4,9 @@ using static Gallery.Pages.GalleryUi;
 namespace Gallery.Pages;
 
 /// <summary>
-/// The capabilities that only exist because the project is compiled by the real Tailwind CLI.
-/// Every class string on this page is a literal, so it is precompiled — none of it would resolve
-/// through the built-in class-name parser, which knows only the standard scale.
+/// The capabilities that only exist because the project is compiled by the real Tailwind CLI:
+/// arbitrary values, @theme tokens, @utility, @custom-variant. None of them is something we
+/// implement — Tailwind resolves them, and the engine only lowers the CSS it emits.
 /// </summary>
 public class TailwindCssPage : ContentPage
 {

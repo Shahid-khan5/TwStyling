@@ -63,8 +63,8 @@ public sealed class TwSourceGenerator : IIncrementalGenerator
             .Collect();
 
         // The stylesheet the real Tailwind CLI produced for this project (see TwStyling.Maui.targets).
-        // When present it is the source of truth for what every utility means, so the built-in
-        // class-name parser is bypassed entirely. Absent, the parser handles everything as before.
+        // It is the only source of truth for what a utility means; with no stylesheet there is no
+        // vocabulary, and the generator emits nothing.
         //
         // Matched against the TwGeneratedCss build property, never by filename: the MAUI SDK globs
         // *.css as MauiCss and adds the project's *entry* stylesheet to AdditionalFiles by itself.
@@ -202,9 +202,8 @@ public sealed class TwSourceGenerator : IIncrementalGenerator
         // (a phone and a tablet share one build head, so idiom: variants stay dynamic).
         var environment = new TwEnvironment(targetPlatform ?? TwPlatforms.Any, TwIdioms.Any);
 
-        // When the project compiled a Tailwind stylesheet, IT defines the utility vocabulary —
-        // arbitrary values, @theme tokens, @utility, @custom-variant. Fall back to the built-in
-        // class-name parser only when there is no stylesheet.
+        // The compiled stylesheet defines the whole vocabulary — arbitrary values, @theme tokens,
+        // @utility, @custom-variant. There is nothing else to consult.
         TwCssPlanCompiler? cssCompiler = null;
         foreach (var css in tailwindCss)
         {

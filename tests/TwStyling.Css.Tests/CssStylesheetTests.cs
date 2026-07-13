@@ -70,11 +70,11 @@ public class CssStylesheetTests
     public void A_Custom_Variant_Becomes_A_Platform_Tag()
     {
         var rule = Assert.Single(RulesFor(Fixture(), "windows:p-5"));
-        Assert.Equal("windows", rule.Context.Platform);
+        Assert.Equal("windows", Assert.Single(rule.Context.MediaTypes));
         Assert.Equal("padding", Assert.Single(rule.Declarations).Property);
 
         var phone = Assert.Single(RulesFor(Fixture(), "phone:p-1"));
-        Assert.Equal("phone", phone.Context.Platform);
+        Assert.Equal("phone", Assert.Single(phone.Context.MediaTypes));
     }
 
     [Fact]

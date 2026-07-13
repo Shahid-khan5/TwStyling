@@ -314,7 +314,7 @@ internal static class TwCssLowering
                 return false;
 
             // ------------------------------------------------------ transitions
-            case "transition-property": return Add(o, TwPropertyId.TransitionProps, TwValue.Scalar((float)TransitionPropsOf(v)));
+            case "transition-property": return TransitionProps(v, o, ref error);
             case "transition-duration": return Add(o, TwPropertyId.TransitionDuration, TwValue.Scalar(Milliseconds(v, env)));
             case "transition-delay": return Add(o, TwPropertyId.TransitionDelay, TwValue.Scalar(Milliseconds(v, env)));
             case "transition-timing-function": return Add(o, TwPropertyId.TransitionEasing, TwValue.Enum((byte)EasingOf(v)));
@@ -370,8 +370,8 @@ internal static class TwCssLowering
     /// <summary>
     /// The "pill" radius. Tailwind expresses <c>rounded-full</c> as <c>calc(infinity * 1px)</c>,
     /// which is exact in CSS but not a number a native renderer can take — MAUI's Button.CornerRadius
-    /// is an <c>int</c>. Collapse it to the same large finite radius the class-name parser used, which
-    /// exceeds any realistic control size and so renders as a pill.
+    /// is an <c>int</c>. Collapse it to a large finite radius that exceeds any realistic control
+    /// size, which renders as a pill.
     /// </summary>
     private const float PillRadius = 9999f;
 
@@ -471,10 +471,13 @@ internal static class TwCssLowering
             }
         }
 
+        // Not before the switch: `m-[1px_2px]` is a list, and Px would throw on it before the
+        // shorthand case — the one case written to handle it — ever got a look in.
+        if (side == MarginSide.All) return Add(o, TwPropertyId.Margin, Shorthand(v, env));
+
         float px = Px(v, env);
         return side switch
         {
-            MarginSide.All => Add(o, TwPropertyId.Margin, Shorthand(v, env)),
             MarginSide.Top => Add(o, TwPropertyId.Margin, Side(top: px)),
             MarginSide.Right => Add(o, TwPropertyId.Margin, Side(right: px)),
             MarginSide.Bottom => Add(o, TwPropertyId.Margin, Side(bottom: px)),
@@ -810,7 +813,13 @@ internal static class TwCssLowering
         return Add(o, TwPropertyId.Keyframes, TwValue.Enum((byte)kind.Value));
     }
 
-    private static TwTransitionProps TransitionPropsOf(CssValue v)
+    /// <summary>
+    /// The animator interpolates four property groups. Tailwind's own <c>transition</c> utility lists
+    /// more than that (box-shadow, filter, the gradient custom properties), so an unrecognized name
+    /// is ignored rather than rejected — but a list where *nothing* is animatable is a real failure.
+    /// <c>transition-shadow</c> would otherwise lower to "transition none" and quietly not animate.
+    /// </summary>
+    private static bool TransitionProps(CssValue v, List<TwDeclaration> o, ref string? error)
     {
         var items = v is CssCommaList commas ? commas.Items : new[] { v };
         var flags = TwTransitionProps.None;
@@ -819,8 +828,8 @@ internal static class TwCssLowering
         {
             switch (Ident(item))
             {
-                case "all": return TwTransitionProps.All;
-                case "none": return TwTransitionProps.None;
+                case "all": return Add(o, TwPropertyId.TransitionProps, TwValue.Scalar((float)TwTransitionProps.All));
+                case "none": return Add(o, TwPropertyId.TransitionProps, TwValue.Scalar((float)TwTransitionProps.None));
                 case "color":
                 case "background-color":
                 case "border-color":
@@ -837,7 +846,14 @@ internal static class TwCssLowering
                 case "font-size": flags |= TwTransitionProps.Sizes; break;
             }
         }
-        return flags;
+
+        if (flags == TwTransitionProps.None)
+        {
+            error = $"transition-property '{v}' names nothing the native animator can interpolate — "
+                  + "use transition-colors, transition-opacity, transition-transform or transition-all";
+            return false;
+        }
+        return Add(o, TwPropertyId.TransitionProps, TwValue.Scalar((float)flags));
     }
 
     /// <summary>Recognizes Tailwind's four easing curves by their cubic-bezier control points.</summary>

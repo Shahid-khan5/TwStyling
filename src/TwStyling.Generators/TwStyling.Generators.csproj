@@ -13,12 +13,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" PrivateAssets="all" />
-    <!-- Explicit: the compiled-in TwStyling span code depends on this; don't rely on Roslyn's transitive copy -->
+    <!-- Explicit: the compiled-in span code needs it; don't rely on Roslyn's transitive copy. -->
     <PackageReference Include="System.Memory" Version="4.6.0" PrivateAssets="all" />
-    <!-- Same trick as TwStyling.Analyzers: the generator runs the real engine inside csc,
-         so build-time compilation is by definition identical to runtime parsing -->
+    <!-- The generator runs the real engine inside csc, so a build-time plan is identical to a
+         runtime one by construction rather than by agreement. -->
     <Compile Include="..\TwStyling\**\*.cs" Exclude="..\TwStyling\bin\**;..\TwStyling\obj\**" LinkBase="Core" />
-    <!-- TwStyling's CSS front end depends on these; the same self-contained rule applies. -->
     <Compile Include="..\TwStyling.Css\**\*.cs" Exclude="..\TwStyling.Css\bin\**;..\TwStyling.Css\obj\**" LinkBase="Css" />
   </ItemGroup>
 

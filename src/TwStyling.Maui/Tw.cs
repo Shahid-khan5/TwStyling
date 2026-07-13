@@ -133,12 +133,13 @@ public static class TwRuntime
 
     /// <summary>
     /// The Tailwind stylesheet the build embedded into the app assembly (see
-    /// TwStyling.Maui.targets). It backs class strings the generator could not precompile, so
-    /// those resolve through the same Tailwind vocabulary as the literals instead of through the
-    /// built-in parser's own tables.
+    /// TwStyling.Maui.targets). It backs class strings the generator could not precompile — an
+    /// interpolated string, an idiom: variant that depends on the device — so those resolve through
+    /// the same Tailwind vocabulary as the literals.
     ///
-    /// Null when the project has no tw.css, or opted out with TwEmbedStylesheet=false — the parser
-    /// then handles dynamic strings, as it did before the CSS pipeline existed.
+    /// Null when the build skipped the CSS pipeline or opted out with TwEmbedStylesheet=false. There
+    /// is no second vocabulary behind it: a dynamic class string then resolves to nothing, and the
+    /// engine says so rather than styling silently wrong.
     /// </summary>
     private static TwCssPlanCompiler? LoadEmbeddedStylesheet()
     {

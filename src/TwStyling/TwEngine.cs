@@ -49,10 +49,7 @@ public sealed class TwEngine
     /// </summary>
     public TwCssPlanCompiler? Stylesheet { get; set; }
 
-    /// <summary>
-    /// Get the compiled plan for a class string. Cached; thread-safe. With no stylesheet attached
-    /// there is no vocabulary, so every plan is empty — a build that skipped the CSS pipeline.
-    /// </summary>
+    /// <summary>Get the compiled plan for a class string. Cached; thread-safe.</summary>
     public StylePlan GetPlan(string? classes)
     {
         if (string.IsNullOrWhiteSpace(classes))
@@ -61,8 +58,17 @@ public sealed class TwEngine
         if (_cache.TryGetValue(classes!, out var hit))
             return hit;
 
+        // No stylesheet is not "no styles" — it means the CSS pipeline did not run, and every class
+        // in the app is about to do nothing. There is no second vocabulary to fall back to, so this
+        // must be loud. Reported once per class string, through the same sink as every other problem.
         if (Stylesheet is not { } stylesheet)
+        {
+            // TryAdd, so only the thread that won the insert reports it.
+            if (_cache.TryAdd(classes!, StylePlan.Empty) && DiagnosticSink is { } report)
+                report(new TwDiagnostic(classes!, "",
+                    "no Tailwind stylesheet is loaded, so no class resolves to anything. The build did not run the CSS pipeline (TwUseCssPipeline=false?), or UseTw() ran before the stylesheet was embedded."));
             return StylePlan.Empty;
+        }
 
         var compiled = stylesheet.Compile(classes!, Environment);
         var plan = _cache.GetOrAdd(classes!, compiled);

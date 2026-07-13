@@ -12,10 +12,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" PrivateAssets="all" />
-    <!-- Analyzers must be self-contained: compile the engine sources in directly
-         (same single source of truth, no dependency dll for the compiler to load) -->
+    <!-- Analyzers must be self-contained, so the engine is compiled in rather than referenced.
+         Same source of truth as the runtime, with no dependency dll for the compiler to load. -->
     <Compile Include="..\TwStyling\**\*.cs" Exclude="..\TwStyling\bin\**;..\TwStyling\obj\**" LinkBase="Core" />
-    <!-- TwStyling's CSS front end depends on these; the same self-contained rule applies. -->
     <Compile Include="..\TwStyling.Css\**\*.cs" Exclude="..\TwStyling.Css\bin\**;..\TwStyling.Css\obj\**" LinkBase="Css" />
   </ItemGroup>
 

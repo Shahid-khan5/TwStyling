@@ -36,9 +36,8 @@
     <None Include="..\TwStyling.Generators\bin\$(Configuration)\netstandard2.0\TwStyling.Generators.dll"
           Pack="true" PackagePath="analyzers\dotnet\cs" Visible="false" />
 
-    <!-- NuGet auto-imports build\$(PackageId).props/.targets into consuming projects, matched
-         by exact filename — these must stay named after PackageId (TwStyling.Maui), not the
-         assembly. Update, not Include: the SDK's default None glob already picked these up. -->
+    <!-- NuGet auto-imports build\$(PackageId).props/.targets by exact filename, so these must stay
+         named after PackageId. Update, not Include: the SDK's None glob already picked them up. -->
     <None Update="build\TwStyling.Maui.props" Pack="true" PackagePath="build\TwStyling.Maui.props" />
     <None Update="build\TwStyling.Maui.targets" Pack="true" PackagePath="build\TwStyling.Maui.targets" />
   </ItemGroup>

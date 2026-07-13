@@ -27,9 +27,9 @@ jobs:
           dotnet test tests/TwStyling.Tests/TwStyling.Tests.csproj -c Release
           dotnet test tests/TwStyling.Css.Tests/TwStyling.Css.Tests.csproj -c Release
 
+      # The two packages. TwStyling.Css is not one — it is compiled into TwStyling.
       - name: Pack (verifies packaging stays healthy)
         run: |
-          dotnet pack src/TwStyling.Css/TwStyling.Css.csproj -c Release -o artifacts
           dotnet pack src/TwStyling/TwStyling.csproj -c Release -o artifacts
           dotnet pack src/TwStyling.Maui/TwStyling.Maui.csproj -c Release -o artifacts
 

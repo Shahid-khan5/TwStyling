@@ -27,7 +27,7 @@ internal static class CssMediaQuery
         double minWidth = context.MinWidth;
         double maxWidth = context.MaxWidth;
         string? scheme = context.ColorScheme;
-        string? platform = context.Platform;
+        List<string>? mediaTypes = null;
 
         foreach (var raw in SplitConditions(body))
         {
@@ -44,7 +44,8 @@ internal static class CssMediaQuery
                 if (condition.Equals("print", StringComparison.OrdinalIgnoreCase))
                     return false;
 
-                platform = condition.ToLowerInvariant();
+                // Accumulate. `android:phone:x` nests two of these, and both must survive.
+                (mediaTypes ??= new List<string>(context.MediaTypes)).Add(condition.ToLowerInvariant());
                 continue;
             }
 
@@ -87,7 +88,7 @@ internal static class CssMediaQuery
             }
         }
 
-        result = new CssContext(minWidth, maxWidth, scheme, platform, context.Pseudo);
+        result = new CssContext(minWidth, maxWidth, scheme, mediaTypes ?? context.MediaTypes, context.Pseudo);
         return true;
     }
 

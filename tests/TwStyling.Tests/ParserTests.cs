@@ -158,6 +158,28 @@ public class ParserTests
         Assert.Equal(0xFF0F172Bu, plan.Dark.Single(d => d.Property == TwPropertyId.Background).Value.Rgba);
     }
 
+    /// <summary>
+    /// A platform and an idiom are independent conditions, and Tailwind nests them as two separate
+    /// <c>@media</c> blocks. Collapsing them into one slot silently dropped the outer one, so
+    /// <c>android:phone:</c> also styled an iPhone.
+    /// </summary>
+    [Fact]
+    public void Stacked_platform_and_idiom_variants_both_constrain()
+    {
+        const string cls = "android:phone:p-3";
+
+        var androidPhone = new TwEnvironment(TwPlatforms.Android, TwIdioms.Phone);
+        var iosPhone = new TwEnvironment(TwPlatforms.Ios, TwIdioms.Phone);
+        var androidTablet = new TwEnvironment(TwPlatforms.Android, TwIdioms.Tablet);
+
+        Assert.Equal(12f, Single(NewEngine(androidPhone).GetPlan(cls), TwPropertyId.Padding).Value.X);
+
+        // Neither half may be dropped: an iPhone is the wrong platform, an Android tablet the
+        // wrong idiom, and each must fail the condition on its own.
+        Assert.Empty(NewEngine(iosPhone).GetPlan(cls).Light);
+        Assert.Empty(NewEngine(androidTablet).GetPlan(cls).Light);
+    }
+
     [Fact]
     public void Static_plan_reports_no_theme_difference()
     {
@@ -301,5 +323,64 @@ public class ParserTests
     {
         var plan = NewEngine().GetPlan("bg-red-500 bg-blue-500");
         Assert.Equal(0xFF2B7FFFu, Single(plan, TwPropertyId.Background).Value.Rgba);
+    }
+
+    /// <summary>
+    /// The gradient lives on <c>bg-linear-to-r</c> as a <c>background-image</c> that reads
+    /// <c>--tw-gradient-stops</c>; only the stop utilities declare it. When the stop is variant-
+    /// qualified, the *unqualified* background-image is what has to be recomputed under that
+    /// variant — a browser's cascade does this for free, and we have to do it on purpose.
+    /// </summary>
+    [Fact]
+    public void A_variant_qualified_gradient_stop_reaches_the_gradient()
+    {
+        var plan = NewEngine().GetPlan("bg-linear-to-r from-blue-500 to-green-500 hover:from-red-500");
+
+        Assert.Equal(0xFF2B7FFFu, Single(plan, TwPropertyId.GradientFrom).Value.Rgba);
+
+        var hover = plan.States.Single(s => s.State == TwInteractiveState.Hover);
+        Assert.Equal(0xFFFB2C36u, hover.Light.Single(d => d.Property == TwPropertyId.GradientFrom).Value.Rgba);
+    }
+
+    [Fact]
+    public void Margin_shorthand_takes_more_than_one_value()
+    {
+        var edges = Single(NewEngine().GetPlan("m-[1px_2px]"), TwPropertyId.Margin).Value;
+        Assert.Equal(2f, edges.X); // left
+        Assert.Equal(1f, edges.Y); // top
+        Assert.Equal(2f, edges.Z); // right
+        Assert.Equal(1f, edges.W); // bottom
+    }
+
+    /// <summary>
+    /// Tailwind's plain <c>transition</c> lists properties we cannot animate (box-shadow, filter)
+    /// alongside ones we can, so an unknown name is ignored. But a transition of *only* such a
+    /// property animates nothing, and must say so instead of lowering to "transition none".
+    /// </summary>
+    [Fact]
+    public void A_transition_that_can_animate_nothing_is_a_diagnostic()
+    {
+        var diags = TwTestEngine.Validate("transition-shadow");
+        Assert.NotEmpty(diags);
+        Assert.Contains("transition-colors", diags[0].Message);
+
+        Assert.Empty(TwTestEngine.Validate("transition duration-300"));
+    }
+
+    /// <summary>
+    /// With the class-name parser gone there is no second vocabulary. An engine with no stylesheet
+    /// therefore resolves nothing at all — which is a build that skipped the CSS pipeline, not a
+    /// styling choice, and is the one thing the engine must never do quietly.
+    /// </summary>
+    [Fact]
+    public void An_engine_with_no_stylesheet_says_so()
+    {
+        var seen = new List<TwDiagnostic>();
+        var engine = new TwEngine(TwTestEngine.Windows) { DiagnosticSink = seen.Add };
+
+        Assert.Same(StylePlan.Empty, engine.GetPlan("bg-blue-500"));
+
+        var diagnostic = Assert.Single(seen);
+        Assert.Contains("no Tailwind stylesheet", diagnostic.Message);
     }
 }

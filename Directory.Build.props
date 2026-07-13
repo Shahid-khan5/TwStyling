@@ -4,29 +4,20 @@
     <!-- Opt in per-project; keeps tests, benchmarks and the Gallery sample out of the feed -->
     <IsPackable>false</IsPackable>
 
-    <!--
-      0.1.0-preview.1 shipped as TwMaui / TwMaui.Core; both IDs are retired and unlisted.
-
-      1.0.0-rc.1 is the CSS pipeline. Tailwind itself is now the only vocabulary: the class-name
-      parser and its copy of Tailwind's theme are deleted, so nothing can drift from Tailwind. The
-      assemblies and namespaces were renamed to match the package IDs (Tw.Core → TwStyling,
-      Tw.Maui → TwStyling.Maui). The API is what 1.0 will ship; rc rather than final because
-      iOS and Android are verified by build and by generated plans, but have not yet been RUN.
-    -->
+    <!-- rc, not final: iOS and Android are verified by build and by generated plans, but not yet RUN. -->
     <Version>1.0.0-rc.1</Version>
     <Authors>Shahid Khan</Authors>
     <Company>Shahid Khan</Company>
     <Copyright>Copyright (c) 2026 Shahid Khan</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <PackageProjectUrl>https://github.com/Shahid-khan5/TwStyling.Maui</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/Shahid-khan5/TwStyling.Maui</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Shahid-khan5/TwStyling</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Shahid-khan5/TwStyling</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
     <PackageTags>maui;tailwind;css;styling;ui;utility-classes;dotnet;xaml</PackageTags>
 
-    <!-- Symbols + SourceLink. The .NET SDK bundles SourceLink, so no PackageReference is needed. -->
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>

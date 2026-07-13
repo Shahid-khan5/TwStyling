@@ -13,15 +13,17 @@ internal sealed class CssContext
         double minWidth = 0,
         double maxWidth = double.PositiveInfinity,
         string? colorScheme = null,
-        string? platform = null,
+        IReadOnlyList<string>? mediaTypes = null,
         CssPseudo pseudo = CssPseudo.None)
     {
         MinWidth = minWidth;
         MaxWidth = maxWidth;
         ColorScheme = colorScheme;
-        Platform = platform;
+        MediaTypes = mediaTypes ?? Empty;
         Pseudo = pseudo;
     }
+
+    private static readonly string[] Empty = new string[0];
 
     /// <summary>Lower bound in px from <c>(width &gt;= N)</c> / <c>(min-width: N)</c>. 0 means unbounded.</summary>
     public double MinWidth { get; }
@@ -33,18 +35,21 @@ internal sealed class CssContext
     public string? ColorScheme { get; }
 
     /// <summary>
-    /// The bare media identifier from a custom variant, e.g. <c>@media windows</c>. Not valid CSS —
+    /// The bare media identifiers from custom variants, e.g. <c>@media windows</c>. Not valid CSS —
     /// Tailwind passes an unrecognized <c>@custom-variant</c> media query through verbatim, which is
     /// exactly the hook we use to carry platform variants through to build-time filtering.
+    ///
+    /// A list, not one value: <c>android:phone:text-sm</c> nests two of them, and collapsing that to
+    /// a single slot would silently drop one half of the condition.
     /// </summary>
-    public string? Platform { get; }
+    public IReadOnlyList<string> MediaTypes { get; }
 
     public CssPseudo Pseudo { get; }
 
     public static readonly CssContext Root = new();
 
     public CssContext With(CssPseudo pseudo) =>
-        new(MinWidth, MaxWidth, ColorScheme, Platform, pseudo == CssPseudo.None ? Pseudo : pseudo);
+        new(MinWidth, MaxWidth, ColorScheme, MediaTypes, pseudo == CssPseudo.None ? Pseudo : pseudo);
 
     public override string ToString()
     {
@@ -52,7 +57,7 @@ internal sealed class CssContext
         if (MinWidth > 0) parts.Add($"min-width:{MinWidth}");
         if (!double.IsPositiveInfinity(MaxWidth)) parts.Add($"max-width:{MaxWidth}");
         if (ColorScheme is not null) parts.Add(ColorScheme);
-        if (Platform is not null) parts.Add(Platform);
+        parts.AddRange(MediaTypes);
         if (Pseudo != CssPseudo.None) parts.Add(Pseudo.ToString().ToLowerInvariant());
         return parts.Count == 0 ? "(root)" : string.Join(" ", parts);
     }
@@ -131,7 +136,7 @@ internal static class CssStylesheetParser
         var scoped = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
 
         int i = 0;
-        ParseBlock(css, ref i, CssContext.Root, className: null, rules, variables, scoped, inUtilities: false);
+        ParseBlock(css, ref i, CssContext.Root, className: null, rules, variables, scoped);
 
         return new CssStylesheet(
             rules,
@@ -146,7 +151,7 @@ internal static class CssStylesheetParser
     private static void ParseBlock(
         string css, ref int i, CssContext context, string? className,
         List<CssRule> rules, Dictionary<string, string> variables,
-        Dictionary<string, Dictionary<string, string>> scoped, bool inUtilities)
+        Dictionary<string, Dictionary<string, string>> scoped)
     {
         var declarations = new List<CssDeclaration>();
 
@@ -211,7 +216,7 @@ internal static class CssStylesheetParser
                 continue;
             }
             Flush();
-            DispatchBlock(css, ref i, prelude, context, className, rules, variables, scoped, inUtilities);
+            DispatchBlock(css, ref i, prelude, context, className, rules, variables, scoped);
         }
 
         Flush();
@@ -220,7 +225,7 @@ internal static class CssStylesheetParser
     private static void DispatchBlock(
         string css, ref int i, string prelude, CssContext context, string? className,
         List<CssRule> rules, Dictionary<string, string> variables,
-        Dictionary<string, Dictionary<string, string>> scoped, bool inUtilities)
+        Dictionary<string, Dictionary<string, string>> scoped)
     {
         if (prelude.StartsWith("@", StringComparison.Ordinal))
         {
@@ -243,14 +248,13 @@ internal static class CssStylesheetParser
                     SkipBlock(css, ref i); // a query we cannot satisfy statically
                     return;
                 }
-                ParseBlock(css, ref i, mediaContext, className, rules, variables, scoped, inUtilities);
+                ParseBlock(css, ref i, mediaContext, className, rules, variables, scoped);
                 return;
             }
 
             if (prelude.StartsWith("@layer", StringComparison.Ordinal))
             {
-                bool utilities = inUtilities || prelude.Contains("utilities");
-                ParseBlock(css, ref i, context, className, rules, variables, scoped, utilities);
+                ParseBlock(css, ref i, context, className, rules, variables, scoped);
                 return;
             }
 
@@ -258,7 +262,7 @@ internal static class CssStylesheetParser
             {
                 // Descend. Tailwind emits a legacy value first and the modern one inside @supports;
                 // both target the same property, so later-wins naturally prefers the modern branch.
-                ParseBlock(css, ref i, context, className, rules, variables, scoped, inUtilities);
+                ParseBlock(css, ref i, context, className, rules, variables, scoped);
                 return;
             }
 
@@ -277,7 +281,7 @@ internal static class CssStylesheetParser
         if (prelude.StartsWith("&", StringComparison.Ordinal))
         {
             var pseudo = PseudoOf(prelude);
-            ParseBlock(css, ref i, context.With(pseudo), className, rules, variables, scoped, inUtilities);
+            ParseBlock(css, ref i, context.With(pseudo), className, rules, variables, scoped);
             return;
         }
 
@@ -286,7 +290,7 @@ internal static class CssStylesheetParser
         {
             var pseudo = PseudoOf(prelude);
             ParseBlock(css, ref i, pseudo == CssPseudo.None ? context : context.With(pseudo),
-                name, rules, variables, scoped, inUtilities);
+                name, rules, variables, scoped);
             return;
         }
 
